@@ -1,0 +1,59 @@
+{
+    "caption": "Aerial view of a train station captured via Google Earth. The station is characterized by an elongated structure with multiple sections and roofs of different materials, surrounded by other smaller buildings, parking zones with marked bays, and access roads. Adjacent to the station, directional lanes guide vehicular traffic.",
+    "objects": [
+        {
+            "obj_id": 0,
+            "referring_sentence": "The elongated train station is visible in the image with a multi-section roof.",
+            "obj_cls": "trainstation",
+            "obj_corner": [
+                0.041015625,
+                0.5546875,
+                1.439453125,
+                0.5546875,
+                1.439453125,
+                0.822265625,
+                0.041015625,
+                0.822265625
+            ],
+            "obj_coord": [
+                0.04,
+                0.55,
+                1.44,
+                0.82
+            ],
+            "is_unique": true,
+            "obj_position": "",
+            "obj_rel_position": "",
+            "obj_size": "small",
+            "obj_rel_size": "",
+            "flag": false
+        }
+    ],
+    "qa_pairs": [
+        {
+            "ques_id": 1,
+            "question": "What is the main structure visible in the image?",
+            "type": "object category",
+            "answer": "train station"
+        },
+        {
+            "ques_id": 2,
+            "question": "What object is visible in the upper half of the image?",
+            "type": "object category",
+            "answer": "directional lanes"
+        },
+        {
+            "ques_id": 3,
+            "question": "Are there marked parking bays adjacent to the train station?",
+            "type": "object existence",
+            "answer": "Yes"
+        },
+        {
+            "ques_id": 4,
+            "question": "Does the image show any access roads?",
+            "type": "object existence",
+            "answer": "Yes"
+        }
+    ],
+    "image": "05875_0000.png"
+}

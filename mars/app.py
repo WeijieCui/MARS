@@ -4,7 +4,7 @@ import cv2
 
 
 # 模拟目标检测函数 (你可以替换为真实模型推理)
-def detect_objects(image, target_type):
+def detect_objects(image, target):
     if image is None:
         return None
 

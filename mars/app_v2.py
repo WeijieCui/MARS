@@ -5,10 +5,10 @@ from PIL import Image
 import time
 
 
-# ========== 模拟 RL+YOLO 搜索 ==========
-def dummy_rl_yolo(image_pil, steps=10):
+# ========== 模拟 RL+YOLO 搜索过程 ==========
+def rl_search_and_detect(image_pil, steps=10, delay=0.5):
     """
-    模拟 RL+YOLO 检测过程，逐步更新左图(结果+ROI)和右下角 heatmap。
+    模拟 RL+YOLO 检测过程，逐步 yield (结果图, heatmap)，实现流式更新。
     """
     if image_pil is None:
         return
@@ -19,11 +19,10 @@ def dummy_rl_yolo(image_pil, steps=10):
     # 初始化 10x10 heatmap
     grid = np.zeros((10, 10), dtype=float)
 
-    # 模拟 ROI 移动
+    # 初始化 ROI
     win_w, win_h = W // 4, H // 4
     cx, cy = W // 2, H // 2
 
-    updates = []
     for t in range(steps):
         # 随机移动 ROI
         cx = np.clip(cx + np.random.randint(-40, 41), win_w // 2, W - win_w // 2)
@@ -36,7 +35,7 @@ def dummy_rl_yolo(image_pil, steps=10):
         j = int(cx / W * 10)
         grid[i, j] = max(grid[i, j], np.random.rand())  # 模拟置信度
 
-        # 画结果图
+        # 画结果图 (带 ROI 红框)
         overlay = img_bgr.copy()
         cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 0, 255), 3)  # 当前 ROI 红框
         overlay_rgb = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
@@ -52,37 +51,36 @@ def dummy_rl_yolo(image_pil, steps=10):
         heatmap = cv2.resize(heatmap, (200, 200), interpolation=cv2.INTER_NEAREST)
 
         # 转 PIL
-        updates.append((Image.fromarray(overlay_rgb), Image.fromarray(heatmap)))
+        overlay_pil = Image.fromarray(overlay_rgb)
+        heatmap_pil = Image.fromarray(heatmap)
 
-    return updates
+        # 每一步 yield 出去
+        yield overlay_pil, heatmap_pil
 
-
-def run_search(image_pil, steps):
-    updates = dummy_rl_yolo(image_pil, steps)
-    # 只返回最后一次结果
-    if updates:
-        return updates[-1]
-    return None, None
+        # 控制速度
+        time.sleep(delay)
 
 
 # ========== Gradio 界面 ==========
 with gr.Blocks() as demo:
-    gr.Markdown("## 遥感图像目标检测（RL + YOLO）")
+    gr.Markdown("## 遥感图像目标检测（RL + YOLO 实时流式演示）")
 
     with gr.Row():
         with gr.Column(scale=2):
-            out_image = gr.Image(type="pil", label="检测结果", show_label=True, height=600, width=800)
+            out_image = gr.Image(type="pil", label="检测结果 (实时更新)")
         with gr.Column(scale=1):
-            heatmap = gr.Image(type="pil", label="搜索矩阵 Heatmap", show_label=True)
-            upload = gr.Image(type="pil", label="上传遥感图", interactive=True, visible=True, show_label=True,
-                              render=True, mirror_webcam=False, height=240, width=400)
-            steps = gr.Slider(5, 30, value=10, step=1, label="搜索步数")
-            btn = gr.Button("开始检测")
+            heatmap = gr.Image(type="pil", label="搜索矩阵 Heatmap (实时更新)")
+
+    with gr.Row():
+        upload = gr.Image(type="pil", label="上传遥感图", interactive=True, show_label=True)
+        steps = gr.Slider(5, 30, value=10, step=1, label="搜索步数")
+        btn = gr.Button("开始检测 (流式)")
 
     btn.click(
-        fn=run_search,
+        fn=rl_search_and_detect,
         inputs=[upload, steps],
-        outputs=[out_image, heatmap]
+        outputs=[out_image, heatmap],
+        show_progress=True
     )
 
 if __name__ == "__main__":

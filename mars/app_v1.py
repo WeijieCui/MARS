@@ -5,6 +5,8 @@ Gradio 交互 + RL 搜索 + OBB 可视化（后端占位实现）
 - 动作空间: up/down/left/right/zoom_in/zoom_out
 - 检测器接口可替换为真实 YOLO (yolo11)
 """
+import time
+
 import gradio as gr
 import numpy as np
 import cv2
@@ -12,9 +14,22 @@ from PIL import Image
 import math
 from typing import List, Dict, Any
 
-from mars.agent import RLAgent
+from mars.agent import RLAgent, ACTIONS
 from mars.detector import RealYoloDetector, BaseDetector
 from mars.env import SearchEnv
+from mars.utils import merge_bounding_box
+
+custom_css = """
+.custom-checkbox {
+    padding-top: 26px;
+}
+"""
+
+custom_css_flex = """
+.flex-row {
+    flex-direction: row;
+}
+"""
 
 
 # ----------------------------
@@ -86,70 +101,123 @@ def to_heatmap_image(grid: np.ndarray) -> np.ndarray:
 # ----------------------------
 # 管线：一次按钮点击内执行若干步搜索
 # ----------------------------
-def rl_search_and_detect(image_pil: Image.Image, target_type: str, steps: int = 12, use_real_yolo: bool = False):
+def rl_search_and_detect(
+        image_url: str,
+        target: str,
+        steps: int = 12,
+        model_select: str = 'YOLO_V11',
+        training=False,
+):
     """
     对输入图像运行 RL 搜索 + 检测若干步，输出：
     - 叠加 OBB 的图像
     - 探索热力图（10x10）
     """
-    if image_pil is None:
+    if image_url is None:
         return None, None
-
-    img_bgr = cv2.cvtColor(np.array(image_pil.convert("RGB")), cv2.COLOR_RGB2BGR)
-
+    # image_pil = Image.ImageFile(image_url)
+    # img_bgr = cv2.cvtColor(np.array(image_pil.convert("RGB")), cv2.COLOR_RGB2BGR)
+    img_bgr = cv2.imread(image_url)
     # 选择检测器
-    if use_real_yolo:
-        detector = RealYoloDetector(target_type=target_type)
+    if model_select == 'YOLO_V11':
+        detector = RealYoloDetector(target=target)
     else:
-        detector = BaseDetector(target_type=target_type)
+        detector = BaseDetector(target=target)
 
-    env = SearchEnv(img_bgr, detector, grid_n=10)
-    agent = RLAgent(grid_shape=(10, 10), eps=0.15, alpha=0.5, gamma=0.9)
-
+    env = SearchEnv(img_bgr, detector, target=target, grid_n=10)
     all_obbs: List[Dict[str, Any]] = []
+    # 绘制输出
+    overlay = draw_obbs(img_bgr, all_obbs, color=(0, 255, 0), thickness=3)
+    overlay_rgb = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
+    heatmap_rgb = cv2.cvtColor(to_heatmap_image(env.grid), cv2.COLOR_BGR2RGB)
+    view = cv2.cvtColor(env.view(), cv2.COLOR_BGR2RGB)
+    yield Image.fromarray(overlay_rgb), Image.fromarray(heatmap_rgb), Image.fromarray(view)
+
+    agent = RLAgent(grid_shape=(10, 10), eps=0.15, alpha=0.5, gamma=0.9, training=training)
 
     # RL 回合
     i, j = env._cell_of(env.cx, env.cy)
-    s = (i, j, env.scale_idx)
+    status = (i, j, env.scale_idx, ACTIONS)
     last_action = None
-    for t in range(steps):
-        a = agent.select_action(*s)
-        s_old = s
-        s, r, obbs, s2 = env.step(a)
-        agent.update(s_old, a, r, s2)
-        all_obbs.extend(obbs)
-        last_action = a
-        s = s2
-
-    # 绘制输出
-    overlay = draw_obbs(img_bgr, all_obbs, color=(0, 255, 0), thickness=3)
     heatmap = to_heatmap_image(env.grid)
-    overlay_rgb = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
-    heatmap_rgb = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
-    return Image.fromarray(overlay_rgb), Image.fromarray(heatmap_rgb)
+    for t in range(int(steps)):
+        action = agent.select_action(*status)
+        if not action:
+            return Image.fromarray(overlay_rgb), Image.fromarray(heatmap_rgb), Image.fromarray(view)
+        s_old = status
+        status, reward, obbs, status2, view = env.step(action)
+        agent.update(s_old, action, reward, status2)
+        merge_bounding_box(all_obbs, obbs)
+        last_action = action
+        status = status2
+        heatmap = to_heatmap_image(env.grid)
+
+        # 绘制输出
+        overlay = draw_obbs(img_bgr, all_obbs, color=(0, 255, 0), thickness=3)
+        overlay_rgb = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
+        heatmap_rgb = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
+        yield Image.fromarray(overlay_rgb), Image.fromarray(heatmap_rgb), Image.fromarray(view)
+        # 控制速度
+        time.sleep(0.1)
 
 
 # ----------------------------
 # Gradio 界面（前后端打通）
 # ----------------------------
-with gr.Blocks() as demo:
+with gr.Blocks(css=custom_css) as demo:
     gr.Markdown("## Mars Detector(RL + OBB)")
 
     with gr.Row():
         with gr.Column(scale=2):
-            out_image = gr.Image(type="pil", label="Result")
-            out_grid = gr.Image(type="pil", label="Exploring Image")
+            out_image = gr.Image(type="pil", label="Result", height=650, width=760)
         with gr.Column(scale=1):
-            in_image = gr.Image(type="pil", label="Upload an Image", interactive=True)
-            target = gr.Dropdown(["Plane", "Ship", "Car", "Basket Ball Pitch"], label="Target", value="Plane")
-            steps = gr.Slider(4, 40, value=12, step=1, label="Max Steps")
-            use_real = gr.Checkbox(False, label="YOLO V11")
-            btn = gr.Button("Detect")
+            with gr.Blocks(css="custom_css_flex"):
+                with gr.Row():
+                    heatmap2 = gr.Image(type="pil", label="Exploring Image", width=200, height=220, interactive=False)
+                    heatmap = gr.Image(type="pil", label="Exploring Image", width=200, height=220)
+            with gr.Column():
+                with gr.Row():
+                    target_dropdown = gr.Dropdown([
+                        ('All', '-1'),
+                        ('Plane', '0'),
+                        ('Ship', '1'),
+                        ('Storage tank', '2'),
+                        ('Baseball Diamond', '3'),
+                        ('Tennis Court', '4'),
+                        ('Basketball Court', '5'),
+                        ('Ground Track Field', '6'),
+                        ('Harbor', '7'),
+                        ('Bridge', '8'),
+                        ('Larget Vehicle', '9'),
+                        ('Small Vehicle', '10'),
+                        ('Helicopter', '11'),
+                        ('Roundabout', '12'),
+                        ('Soccer Ball Field', '13'),
+                        ('Swimming Poll', '14'),
+                        # ({0: 'plane', 1: 'ship', 2: 'storage tank', 3: 'baseball diamond', 4: 'tennis court',
+                        #   5: 'basketball court', 6: 'ground track field', 7: 'harbor', 8: 'bridge', 9: 'large vehicle',
+                        #   10: 'small vehicle', 11: 'helicopter', 12: 'roundabout', 13: 'soccer ball field', 14: 'swimming pool'}),
+                    ],
+                        label="Target",
+                        value="-1")
+                    steps_dropdown = gr.Dropdown(["5", "10", "20", "50"], label="Max Steps", value="10")
+                    model_dropdown = gr.Dropdown(["YOLO_V11"], label="Model", value="YOLO_V11")
+                    training_radio = gr.Checkbox(False, label="Training", elem_classes="custom-checkbox")
+                    # 可以通过CSS进一步定制样式
+                    gr.HTML("""
+                    <style>
+                    .custom-checkbox label {
+                        padding-top: 10px;
+                    }
+                    </style>
+                    """, max_height=0)
+                in_image = gr.File(label="Upload an Image", height=30)
+                btn = gr.Button("Detect")
 
     btn.click(
         fn=rl_search_and_detect,
-        inputs=[in_image, target, steps, use_real],
-        outputs=[out_image, out_grid]
+        inputs=[in_image, target_dropdown, steps_dropdown, model_dropdown, training_radio],
+        outputs=[out_image, heatmap, heatmap2]
     )
 
 if __name__ == "__main__":

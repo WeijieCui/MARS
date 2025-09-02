@@ -9,10 +9,10 @@ import numpy as np
 # 检测器接口
 # ----------------------------
 class BaseDetector:
-    def __init__(self, target_type: str):
-        self.target_type = target_type
+    def __init__(self, target: str):
+        self.target = target
 
-    def infer_obb(self, image_bgr: np.ndarray, roi_xyxy: Tuple[int, int, int, int]) -> Tuple[
+    def infer_obb(self, crop: np.ndarray, target: str = '') -> Tuple[
         List[Dict[str, Any]], float]:
         """
         在给定 ROI 上做检测，返回:
@@ -20,8 +20,6 @@ class BaseDetector:
         - best_conf: ROI 内最优置信度（用于填表）
         默认占位实现：随机少量 OBB，概率和图像纹理简单相关
         """
-        x1, y1, x2, y2 = roi_xyxy
-        crop = image_bgr[y1:y2, x1:x2]
         if crop.size == 0:
             return [], 0.0
 
@@ -36,8 +34,8 @@ class BaseDetector:
         num = np.random.binomial(n=3, p=min(0.9, max(0.05, edge_score)))
         h, w = crop.shape[:2]
         for _ in range(num):
-            cx = x1 + np.random.randint(w // 6, w - w // 6)
-            cy = y1 + np.random.randint(h // 6, h - h // 6)
+            cx = np.random.randint(w // 6, w - w // 6)
+            cy = np.random.randint(h // 6, h - h // 6)
             ww = np.random.randint(max(12, w // 10), max(20, w // 3))
             hh = np.random.randint(max(12, h // 10), max(20, h // 3))
             theta = np.random.uniform(-90, 90)
@@ -54,8 +52,8 @@ class RealYoloDetector(BaseDetector):
       2) 在 ROI 上截取后推理，解析为 OBB 列表
     """
 
-    def __init__(self, target_type: str, weights_path: Optional[str] = None):
-        super().__init__(target_type)
+    def __init__(self, target: str, weights_path: Optional[str] = None):
+        super().__init__(target)
         self.model = None
         self.ready = False
         try:
@@ -66,22 +64,20 @@ class RealYoloDetector(BaseDetector):
         except Exception as e:
             print("YOLO Loaded failed, back to default detector:", e)
 
-    def infer_obb(self, image_bgr: np.ndarray, roi_xyxy: Tuple[int, int, int, int]) -> Tuple[
-        List[Dict[str, Any]], float]:
+    def infer_obb(self, crop: np.ndarray, target: str = '') -> \
+            Tuple[List[Dict[str, Any]], float]:
         if not self.ready:
-            return BaseDetector.infer_obb(self, image_bgr, roi_xyxy)
+            return BaseDetector.infer_obb(self, crop)
         # TODO: 截取 ROI，送入 YOLO OBB 推理，组装 obbs
         # 伪代码:
-        x1, y1, x2, y2 = roi_xyxy
-        crop = image_bgr[y1:y2, x1:x2]
         results = self.model(crop, conf=0.25, iou=0.5)
-        obbs = parse_yolo_obb(results)  # 转为 [{'cx','cy','w','h','theta','score'}, ...]
+        obbs = parse_yolo_obb(results, target)  # 转为 [{'cx','cy','w','h','theta','score'}, ...]
         best_conf = max([o['score'] for o in obbs], default=0.0)
         return obbs, best_conf
         # return BaseDetector.infer_obb(self, image_bgr, roi_xyxy)
 
 
-def parse_yolo_obb(results):
+def parse_yolo_obb(results, target: str = ''):
     """
     Convert YOLO OBB results to list of dicts:
     [{'cx','cy','w','h','theta','score'}, ...]
@@ -90,16 +86,19 @@ def parse_yolo_obb(results):
     for r in results:  # each image
         if not hasattr(r, "obb"):  # safety
             continue
+        target_num = int(target)
         # r.obb is an ultralytics.OBB object with xywhr, conf, cls
         xywhr = r.obb.xywhr.cpu().numpy()  # (N,5) [x,y,w,h,theta(rad)]
         confs = r.obb.conf.cpu().numpy()  # (N,)
-        for (cx, cy, w, h, theta), score in zip(xywhr, confs):
-            obbs.append({
-                "cx": float(cx),
-                "cy": float(cy),
-                "w": float(w),
-                "h": float(h),
-                "theta": float(theta * 180 / math.pi),  # convert rad→deg
-                "score": float(score)
-            })
+        cls = r.obb.cls.cpu().numpy().astype(int)  # (N,)
+        for (cx, cy, w, h, theta), score, cl in zip(xywhr, confs, cls):
+            if target_num < 0 or target_num == cl:
+                obbs.append({
+                    "cx": float(cx),
+                    "cy": float(cy),
+                    "w": float(w),
+                    "h": float(h),
+                    "theta": float(theta * 180 / math.pi),  # convert rad→deg
+                    "score": float(score)
+                })
     return obbs

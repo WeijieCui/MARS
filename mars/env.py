@@ -1,6 +1,7 @@
 import numpy as np
 from typing import Optional, List, Dict, Any, Tuple
 
+from mars.agent import ACTIONS
 from mars.detector import BaseDetector
 
 
@@ -8,21 +9,27 @@ from mars.detector import BaseDetector
 # 环境：维护窗口、栅格、与检测器交互
 # ----------------------------
 class SearchEnv:
-    def __init__(self, image_bgr: np.ndarray, detector: BaseDetector, grid_n=10):
+    def __init__(self, image_bgr: np.ndarray, detector: BaseDetector, target: str = '', grid_n=10):
         self.img = image_bgr
         self.detector = detector
+        self.target = target
         self.H, self.W = image_bgr.shape[:2]
         self.grid_n = grid_n
         self.grid = np.zeros((grid_n, grid_n), dtype=float)  # 0/ -1 / (0,1]
-        # 初始窗口：图像较大区域
-        base = 0.6
-        self.win_w = int(self.W * base)
-        self.win_h = int(self.H * base)
         self.cx = self.W // 2
         self.cy = self.H // 2
-        self.scale_levels = [0.35, 0.5, 0.7, 1.0]  # 缩放档位
-        self.scale_idx = 2  # 对应 ~0.7
+        self.scale_levels = [0.18, 0.25, 0.35, 0.5, 0.7, 1.0]  # 缩放档位
+        self.scale_idx = len(self.scale_levels) // 2  # 对应 ~0.7
+        # 初始窗口：图像较大区域
+        base = self.scale_levels[self.scale_idx]
+        self.win_w = int(self.W * base)
+        self.win_h = int(self.H * base)
         self._fit_window()
+        self.actions = [*ACTIONS]
+
+    def view(self):
+        x1, y1, x2, y2 = self._fit_window()
+        return self.img[y1:y2, x1:x2]
 
     def _fit_window(self):
         # 根据中心与比例，确定窗口并裁剪在图像范围内
@@ -50,7 +57,12 @@ class SearchEnv:
         j = max(0, min(self.grid_n - 1, j))
         return i, j
 
-    def step(self, action: str) -> Tuple[Tuple[int, int, int], float, List[Dict[str, Any]], Tuple[int, int, int]]:
+    def step(self, action: str) -> (Tuple)[
+        Tuple[int, int, int],
+        float,
+        List[Dict[str, Any]],
+        Tuple[int, int, int],
+        np.ndarray]:
         """
         执行动作 -> 检测 -> 更新栅格
         返回: s(当前i,j,scale_bin), r(奖励), obbs(此次检测的结果), s2(新状态)
@@ -61,8 +73,9 @@ class SearchEnv:
 
         # 1) 在当前窗口执行检测
         x1, y1, x2, y2 = self._fit_window()
-        obbs, best_conf = self.detector.infer_obb(self.img, (x1, y1, x2, y2))
-
+        crop = self.img[y1:y2, x1:x2]
+        obbs, best_conf = self.detector.infer_obb(crop, self.target)
+        fix_obbs(obbs, x1, y1)
         # 更新探索矩阵：以窗口中心所在格为记录点
         if best_conf > 0:
             self.grid[i, j] = max(self.grid[i, j], best_conf)  # 命中：写入更高置信度
@@ -82,21 +95,58 @@ class SearchEnv:
                 r -= 0.1  # 理论不会触发；以防重复覆盖
 
         # 2) 状态转移：根据动作移动/缩放窗口
-        step_px = max(12, min(self.W, self.H) // 12)
+        step_px = max(20, self.scale_levels[self.scale_idx] * min(self.W, self.H) / 2)
+        # step_px = max(12, min(self.W, self.H) // 12)
         if action == "up":
-            self.cy = max(0, self.cy - step_px)
+            self.cy = self.cy - step_px
+            if self.cy <= 0:
+                self.cy = 0
+                self.actions.remove('up')
+            elif 'down' not in self.actions:
+                self.actions.append('down')
         elif action == "down":
-            self.cy = min(self.H - 1, self.cy + step_px)
+            self.cy = self.cy + step_px
+            if self.cy >= self.H - 1:
+                self.cy = self.H - 1
+                self.actions.remove('down')
+            elif 'up' not in self.actions:
+                self.actions.append('up')
         elif action == "left":
-            self.cx = max(0, self.cx - step_px)
+            self.cx = self.cx - step_px
+            if self.cx <= 0:
+                self.cx = 0
+                self.actions.remove('left')
+            elif 'right' not in self.actions:
+                self.actions.append('right')
         elif action == "right":
-            self.cx = min(self.W - 1, self.cx + step_px)
+            self.cx = self.cx + step_px
+            if self.cx >= self.W - 1:
+                self.cx = self.W - 1
+                self.actions.remove('right')
+            elif 'left' not in self.actions:
+                self.actions.append('left')
         elif action == "zoom_in":
-            self.scale_idx = min(self.scale_idx + 1, len(self.scale_levels) - 1)
+            self.scale_idx = self.scale_idx + 1
+            if self.scale_idx >= len(self.scale_levels) - 1:
+                self.scale_idx = len(self.scale_levels) - 1
+                self.actions.remove('zoom_in')
+            elif 'zoom_out' not in self.actions:
+                self.actions.append('zoom_out')
         elif action == "zoom_out":
             self.scale_idx = max(self.scale_idx - 1, 0)
+            if self.scale_idx <= 0:
+                self.scale_idx = 0
+                self.actions.remove('zoom_out')
+            elif 'zoom_in' not in self.actions:
+                self.actions.append('zoom_in')
 
         # 新状态
         i2, j2 = self._cell_of(self.cx, self.cy)
-        s2 = (i2, j2, self.scale_idx)
-        return s, r, obbs, s2
+        s2 = (i2, j2, self.scale_idx, self.actions)
+        return s, r, obbs, s2, crop
+
+
+def fix_obbs(obbs: List[Dict[str, Any]], x: float, y: float):
+    for obb in obbs:
+        obb['cx'] += x
+        obb['cy'] += y

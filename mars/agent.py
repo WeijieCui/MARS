@@ -1,4 +1,5 @@
 import random
+from abc import ABC, abstractmethod
 from typing import Dict, Tuple
 
 # ----------------------------
@@ -7,7 +8,18 @@ from typing import Dict, Tuple
 ACTIONS = ["up", "down", "left", "right", "zoom_in", "zoom_out"]
 
 
-class RLAgent:
+class Agent(ABC):
+
+    @abstractmethod
+    def select_action(self, i, j, scale_bin, actions) -> str:
+        pass
+
+    @abstractmethod
+    def update(self, s, a, r, s2):
+        pass
+
+
+class RLAgent(Agent):
     def __init__(self, grid_shape=(10, 10), eps=0.15, alpha=0.5, gamma=0.9, training=False):
         self.H, self.W = grid_shape
         self.Q: Dict[Tuple[int, int, int, str], float] = {}  # (i,j,scale_bin,action) -> Q

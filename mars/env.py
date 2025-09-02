@@ -9,23 +9,34 @@ from mars.detector import BaseDetector
 # 环境：维护窗口、栅格、与检测器交互
 # ----------------------------
 class SearchEnv:
-    def __init__(self, image_bgr: np.ndarray, detector: BaseDetector, target: str = '', grid_n=10):
-        self.img = image_bgr
-        self.detector = detector
-        self.target = target
-        self.H, self.W = image_bgr.shape[:2]
+    def __init__(self, grid_n=10):
+        self.H, self.W = 0, 0
+        self.img = None
+        self.target = None
         self.grid_n = grid_n
         self.grid = np.zeros((grid_n, grid_n), dtype=float)  # 0/ -1 / (0,1]
-        self.cx = self.W // 2
-        self.cy = self.H // 2
         self.scale_levels = [0.18, 0.25, 0.35, 0.5, 0.7, 1.0]  # 缩放档位
         self.scale_idx = len(self.scale_levels) // 2  # 对应 ~0.7
         # 初始窗口：图像较大区域
+        self.win_w, self.win_h = 0, 0
+        self.actions = [*ACTIONS]
+
+    def set_image(self, image_bgr: np.ndarray):
+        self.img = image_bgr
+        self.H, self.W = image_bgr.shape[:2]
+        self.cx = self.W // 2
+        self.cy = self.H // 2
         base = self.scale_levels[self.scale_idx]
         self.win_w = int(self.W * base)
         self.win_h = int(self.H * base)
         self._fit_window()
-        self.actions = [*ACTIONS]
+        self.grid = np.zeros((self.grid_n, self.grid_n), dtype=float)
+
+    def set_detector(self, detector: BaseDetector):
+        self.detector = detector
+
+    def set_target(self, target: str = ''):
+        self.target = target
 
     def view(self):
         x1, y1, x2, y2 = self._fit_window()

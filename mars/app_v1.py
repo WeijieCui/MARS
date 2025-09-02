@@ -30,6 +30,7 @@ custom_css_flex = """
     flex-direction: row;
 }
 """
+model_map = {}
 
 
 # ----------------------------
@@ -98,6 +99,17 @@ def to_heatmap_image(grid: np.ndarray) -> np.ndarray:
     return vis
 
 
+def get_detector(model: str):
+    if model in model_map:
+        return model_map.get(model)
+    if model == 'YOLO_V11':
+        detector = RealYoloDetector()
+    else:
+        detector = BaseDetector()
+    model_map.setdefault(model, detector)
+    return detector
+
+
 # ----------------------------
 # 管线：一次按钮点击内执行若干步搜索
 # ----------------------------
@@ -114,16 +126,12 @@ def rl_search_and_detect(
     - 探索热力图（10x10）
     """
     if image_url is None:
-        return None, None
+        return None, None, None, None
     # image_pil = Image.ImageFile(image_url)
     # img_bgr = cv2.cvtColor(np.array(image_pil.convert("RGB")), cv2.COLOR_RGB2BGR)
     img_bgr = cv2.imread(image_url)
     # 选择检测器
-    if model_select == 'YOLO_V11':
-        detector = RealYoloDetector(target=target)
-    else:
-        detector = BaseDetector(target=target)
-
+    detector = get_detector(model_select)
     env = SearchEnv(img_bgr, detector, target=target, grid_n=10)
     all_obbs: List[Dict[str, Any]] = []
     # 绘制输出
@@ -131,7 +139,8 @@ def rl_search_and_detect(
     overlay_rgb = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
     heatmap_rgb = cv2.cvtColor(to_heatmap_image(env.grid), cv2.COLOR_BGR2RGB)
     view = cv2.cvtColor(env.view(), cv2.COLOR_BGR2RGB)
-    yield Image.fromarray(overlay_rgb), Image.fromarray(heatmap_rgb), Image.fromarray(view)
+    yield (Image.fromarray(overlay_rgb), Image.fromarray(heatmap_rgb), Image.fromarray(view),
+           "Detecting: 0 / {}".format(steps))
 
     agent = RLAgent(grid_shape=(10, 10), eps=0.15, alpha=0.5, gamma=0.9, training=training)
 
@@ -143,7 +152,7 @@ def rl_search_and_detect(
     for t in range(int(steps)):
         action = agent.select_action(*status)
         if not action:
-            return Image.fromarray(overlay_rgb), Image.fromarray(heatmap_rgb), Image.fromarray(view)
+            return Image.fromarray(overlay_rgb), Image.fromarray(heatmap_rgb), Image.fromarray(view), "Done"
         s_old = status
         status, reward, obbs, status2, view = env.step(action)
         agent.update(s_old, action, reward, status2)
@@ -156,7 +165,8 @@ def rl_search_and_detect(
         overlay = draw_obbs(img_bgr, all_obbs, color=(0, 255, 0), thickness=3)
         overlay_rgb = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
         heatmap_rgb = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
-        yield Image.fromarray(overlay_rgb), Image.fromarray(heatmap_rgb), Image.fromarray(view)
+        yield Image.fromarray(overlay_rgb), Image.fromarray(heatmap_rgb), Image.fromarray(
+            view), "Detecting: {} / {}".format(t + 1, steps)
         # 控制速度
         time.sleep(0.1)
 
@@ -213,11 +223,12 @@ with gr.Blocks(css=custom_css) as demo:
                     """, max_height=0)
                 in_image = gr.File(label="Upload an Image", height=30)
                 btn = gr.Button("Detect")
+                message = gr.Label(label="Progress: ", value="")
 
     btn.click(
         fn=rl_search_and_detect,
         inputs=[in_image, target_dropdown, steps_dropdown, model_dropdown, training_radio],
-        outputs=[out_image, heatmap, heatmap2]
+        outputs=[out_image, heatmap, heatmap2, message]
     )
 
 if __name__ == "__main__":

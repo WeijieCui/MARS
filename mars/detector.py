@@ -9,8 +9,8 @@ import numpy as np
 # 检测器接口
 # ----------------------------
 class BaseDetector:
-    def __init__(self, target: str):
-        self.target = target
+    def __init__(self):
+        pass
 
     def infer_obb(self, crop: np.ndarray, target: str = '') -> Tuple[
         List[Dict[str, Any]], float]:
@@ -52,8 +52,8 @@ class RealYoloDetector(BaseDetector):
       2) 在 ROI 上截取后推理，解析为 OBB 列表
     """
 
-    def __init__(self, target: str, weights_path: Optional[str] = None):
-        super().__init__(target)
+    def __init__(self, weights_path: Optional[str] = None):
+        super().__init__()
         self.model = None
         self.ready = False
         try:

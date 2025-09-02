@@ -45,7 +45,7 @@ class BaseDetector:
         return obbs, best_conf
 
 
-class RealYoloDetector(BaseDetector):
+class YoloV11Detector(BaseDetector):
     """
     如需接入真实 YOLO（例如 ultralytics 的 yolo11-obb），在此类中完成:
       1) 模型加载（__init__）

@@ -15,7 +15,7 @@ import math
 from typing import List, Dict, Any
 
 from mars.agent import RLAgent, ACTIONS
-from mars.detector import RealYoloDetector, BaseDetector
+from mars.detector import YoloV11Detector, BaseDetector
 from mars.env import SearchEnv
 from mars.utils import merge_bounding_box
 
@@ -103,7 +103,7 @@ def get_detector(model: str):
     if model in model_map:
         return model_map.get(model)
     if model == 'YOLO_V11':
-        detector = RealYoloDetector()
+        detector = YoloV11Detector()
     else:
         detector = BaseDetector()
     model_map.setdefault(model, detector)

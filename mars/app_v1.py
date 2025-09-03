@@ -13,7 +13,7 @@ from PIL import Image
 import math
 from typing import List, Dict, Any
 
-from mars.agent import RLQtableAgent, ACTIONS
+from mars.agent import RLQtableAgent
 from mars.detector import YoloV11Detector, BaseDetector
 from mars.env import SearchEnv
 from mars.utils import merge_bounding_box
@@ -115,7 +115,7 @@ def get_agent(model: str, training: bool = False, load=True):
     if model in agent_model_dict:
         return agent_model_dict.get(model)
     if model == 'QTable':
-        agent = RLQtableAgent(training=training, load=load)
+        agent = RLQtableAgent(training=training, load=load, model='qtable-7.pkl')
     else:
         agent = BaseDetector()
     visual_model_dict.setdefault(model, agent)
@@ -172,17 +172,15 @@ def rl_search_and_detect(
     # RL iterations
     agent = get_agent(agent_name, training=training)
     all_obbs: List[Dict[str, Any]] = []
-    i, j = env._cell_of(env.cx, env.cy)
-    status = (i, j, env.scale_idx, ACTIONS)
+    status = env.reset()
     for t in range(int(steps)):
         action = agent.select_action(*status)
         if not action:
             break
-        s_old = status
-        status, reward, obbs, status2, window = env.step(action)
-        agent.update(s_old, action, reward, status2)
+        status_new, reward, obbs, window = env.step(action)
+        agent.update(status, action, reward, status_new)
         merge_bounding_box(all_obbs, obbs)
-        status = status2
+        status = status_new
         heatmap = to_heatmap_image(env.grid)
 
         # Wrap outputs

@@ -62,11 +62,11 @@ class RLQtableAgent(Agent):
                 best_q, best_a = q, a
         return best_a or random.choice(actions)
 
-    def update(self, s, a, r, s2):
+    def update(self, status, a, r, status_new):
         if not self.training:
             return
-        (i, j, scale_bin, actions) = s
-        (i2, j2, scale_bin2, actions2) = s2
+        (i, j, scale_bin, actions) = status
+        (i2, j2, scale_bin2, actions2) = status_new
         key = self._key(i, j, scale_bin, a)
         q = self.model.get(key, 0.0)
         # 目标 = r + gamma * max_a' Q(s',a')

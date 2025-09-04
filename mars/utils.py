@@ -6,29 +6,30 @@ import math
 
 def merge_bounding_box(all_boxes: List[Dict[str, Any]], boxes: List[Dict[str, Any]]):
     new_joins = []
-    merged_boxes = []
+    # merged_boxes = []
     for nb in boxes:
         merged = False
         box1 = (nb['cx'], nb['cy'], nb['w'], nb['h'], nb['theta'] * 180)
         for ob in all_boxes:
-            box2 = (ob['cx'], ob['cy'], ob['w'], ob['h'], ob['theta'] * 180)
-            iou = obb_iou(box1, box2)
-            if iou > 0.2:
-                merged_boxes.append((ob, nb))
-                merged = True
-                break
+            if ob['class'] == nb['class']:
+                box2 = (ob['cx'], ob['cy'], ob['w'], ob['h'], ob['theta'] * 180)
+                iou = obb_iou(box1, box2)
+                if iou > 0.15:
+                    # merged_boxes.append((ob, nb))
+                    merged = True
+                    break
         if not merged:
             new_joins.append(nb)
-    all_boxes.extend(new_joins)
-    for ob, nb in merged_boxes:
-        box1 = (nb['cx'], nb['cy'], nb['w'], nb['h'], nb['theta'] * 180)
-        box2 = (ob['cx'], ob['cy'], ob['w'], ob['h'], ob['theta'] * 180)
-        merged_box = weighted_fusion([box1, box2], [0.9, 0.8])
-        ob['cx'] = merged_box[0]
-        ob['cy'] = merged_box[1]
-        ob['w'] = merged_box[2]
-        ob['h'] = merged_box[3]
-        ob['theta'] = merged_box[4] / 180
+    return new_joins
+    # for ob, nb in merged_boxes:
+    #     box1 = (nb['cx'], nb['cy'], nb['w'], nb['h'], nb['theta'] * 180)
+    #     box2 = (ob['cx'], ob['cy'], ob['w'], ob['h'], ob['theta'] * 180)
+    #     merged_box = weighted_fusion([box1, box2], [0.9, 0.8])
+    #     ob['cx'] = merged_box[0]
+    #     ob['cy'] = merged_box[1]
+    #     ob['w'] = merged_box[2]
+    #     ob['h'] = merged_box[3]
+    #     ob['theta'] = merged_box[4] / 180
 
 
 def obb_to_polygon(cx, cy, w, h, angle_deg):

@@ -51,6 +51,8 @@ class RLQtableAgent(Agent):
         return (i, j, scale_bin, a)
 
     def select_action(self, i, j, scale_bin, actions) -> str:
+        if not actions:
+            return ''
         # ε-greedy
         if random.random() < self.eps:
             return random.choice(actions)

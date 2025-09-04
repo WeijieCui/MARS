@@ -16,7 +16,6 @@ from typing import List, Dict, Any
 from mars.agent import RLQtableAgent
 from mars.detector import YoloV11Detector, BaseDetector
 from mars.env import SearchEnv
-from mars.utils import merge_bounding_box
 
 custom_css = """
 .custom-checkbox {
@@ -32,6 +31,7 @@ custom_css_flex = """
 visual_model_dict = {}
 agent_model_dict = {}
 env = SearchEnv()
+should_continue = True
 
 
 # ----------------------------
@@ -56,12 +56,36 @@ def angle_to_box(cx, cy, w, h, theta_deg):
     return rot.astype(int)
 
 
-def draw_obbs(img_bgr: np.ndarray, obbs: List[Dict[str, Any]], color=(0, 255, 0), thickness=3):
+colors = {
+    0: (255, 0, 0),
+    1: (255, 125, 0),
+    2: (255, 255, 0),
+    3: (255, 0, 125),
+    4: (255, 0, 255),
+    5: (0, 255, 0),
+    6: (0, 255, 125),
+    7: (0, 255, 255),
+    8: (0, 0, 125),
+    9: (0, 0, 255),
+    10: (125, 0, 0),
+    11: (125, 125, 0),
+    12: (125, 255, 0),
+    13: (125, 0, 125),
+    14: (125, 0, 255),
+}
+
+
+def draw_obbs(img_bgr: np.ndarray, obbs: List[Dict[str, Any]],
+              window: [],
+              color=(0, 255, 0),
+              thickness=3):
     """在 BGR 图上绘制一组 OBB（四点连线）"""
     out = img_bgr.copy()
     for obb in obbs:
         pts = angle_to_box(obb["cx"], obb["cy"], obb["w"], obb["h"], obb["theta"])
-        cv2.polylines(out, [pts], isClosed=True, color=color, thickness=thickness)
+        cv2.polylines(out, [pts], isClosed=True, color=colors[obb['class']], thickness=thickness)
+    if window is not None:
+        cv2.polylines(out, [window], isClosed=True, color=(255, 0, 0), thickness=thickness)
     return out
 
 
@@ -72,7 +96,7 @@ def to_heatmap_image(grid: np.ndarray) -> np.ndarray:
      0 -> Grey (Unknown)
     >0 -> Yellow to Red, confident
     """
-    assert grid.shape == (10, 10)
+    # assert grid.shape == (10, 10)
     norm = np.zeros_like(grid, dtype=float)
     visited_mask = (grid != 0)
     positives = np.maximum(grid, 0)
@@ -81,8 +105,8 @@ def to_heatmap_image(grid: np.ndarray) -> np.ndarray:
         if vmax > 0:
             norm = positives / vmax
     # Draw Grid
-    H, W = 10, 10
-    cell = 32  # Grid size
+    H, W = grid.shape
+    cell = 320 // H  # Grid size
     vis = np.zeros((H * cell, W * cell, 3), dtype=np.uint8)
     for i in range(H):
         for j in range(W):
@@ -115,7 +139,7 @@ def get_agent(model: str, training: bool = False, load=True):
     if model in agent_model_dict:
         return agent_model_dict.get(model)
     if model == 'QTable':
-        agent = RLQtableAgent(training=training, load=load, model='qtable-7.pkl')
+        agent = RLQtableAgent(training=training, load=load, model='qtable-0.pkl')
     else:
         agent = BaseDetector()
     visual_model_dict.setdefault(model, agent)
@@ -134,12 +158,21 @@ def update_file(
     if image_url is None:
         return None, None, None, None, gr.Button("Detect", interactive=False)
     img_bgr = cv2.imread(image_url)
+    h, w = img_bgr.shape[:2]
+    max_size = max(w, h)
+    limit = 3000
+    if max_size > limit:
+        if w >= h:
+            w, h = limit, int(h / w * limit)
+        else:
+            w, h = int(w / h * limit), limit
+        img_bgr = cv2.resize(img_bgr, (w, h), interpolation=cv2.INTER_AREA)
     all_obbs: List[Dict[str, Any]] = []
-    # 绘制输出
-    overlay = draw_obbs(img_bgr, all_obbs, color=(0, 255, 0), thickness=3)
-    overlay_rgb = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
     env.set_image(img_bgr)
-    heatmap_rgb = cv2.cvtColor(to_heatmap_image(env.grid), cv2.COLOR_BGR2RGB)
+    # 绘制输出
+    overlay = draw_obbs(img_bgr, all_obbs, window=env.border(), color=(0, 255, 0), thickness=3)
+    overlay_rgb = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
+    heatmap_rgb = cv2.cvtColor(to_heatmap_image(env.get_grid()), cv2.COLOR_BGR2RGB)
     view = cv2.cvtColor(env.view(), cv2.COLOR_BGR2RGB)
     return (Image.fromarray(overlay_rgb), Image.fromarray(heatmap_rgb), Image.fromarray(view), "",
             gr.Button("Detect", interactive=True))
@@ -151,10 +184,11 @@ def update_file(
 def rl_search_and_detect(
         image_url: str,
         target: str,
-        steps: int = 12,
+        steps: str = '12',
         visual_model: str = 'YOLO_V11',
         agent_name: str = 'QTable',
         training=False,
+        retraining=False,
 ):
     """
     对输入图像运行 RL 搜索 + 检测若干步，输出：
@@ -162,7 +196,9 @@ def rl_search_and_detect(
     - 探索热力图（10x10）
     """
     if image_url is None:
-        return None, None, None, None
+        return None, None, None, "No Image"
+    global should_continue
+    should_continue = True
     img_bgr = cv2.imread(image_url)
     # Env
     detector = get_detector(visual_model)
@@ -170,28 +206,38 @@ def rl_search_and_detect(
     env.set_detector(detector)
     env.set_target(target)
     # RL iterations
-    agent = get_agent(agent_name, training=training)
-    all_obbs: List[Dict[str, Any]] = []
-    status = env.reset()
+    agent = get_agent(agent_name, training=training, load=retraining)
+    status, reward, obbs, new_obbs, window = env.reset()
+    overlay_rgb = None
+    heatmap_rgb = None
     for t in range(int(steps)):
         action = agent.select_action(*status)
         if not action:
             break
-        status_new, reward, obbs, window = env.step(action)
+        status_new, reward, obbs, new_obbs, window = env.step(action)
         agent.update(status, action, reward, status_new)
-        merge_bounding_box(all_obbs, obbs)
         status = status_new
-        heatmap = to_heatmap_image(env.grid)
-
+        heatmap = to_heatmap_image(env.get_grid())
         # Wrap outputs
-        overlay = draw_obbs(img_bgr, all_obbs, color=(0, 255, 0), thickness=3)
+        overlay = draw_obbs(img_bgr, env.found_objects, window=env.border(), color=(0, 255, 0), thickness=3)
         overlay_rgb = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
         heatmap_rgb = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
         yield Image.fromarray(overlay_rgb), Image.fromarray(heatmap_rgb), Image.fromarray(
-            window), "Detecting: {} / {}".format(t + 1, steps)
+            window), "Steps: {} / {}, found: {}. {}".format(
+            t + 1, steps, len(obbs), 'Done.' if len(status_new[-1]) == 0 else '')
+        if not should_continue or len(status_new[-1]) == 0:
+            break
     if training:
         agent.save()
-    return Image.fromarray(overlay_rgb), Image.fromarray(heatmap_rgb), Image.fromarray(window), "Done"
+    yield (Image.fromarray(overlay_rgb) if overlay_rgb is not None else None,
+            Image.fromarray(heatmap_rgb) if heatmap_rgb is not None else None,
+            Image.fromarray(window), "Found: {}. Done.".format(len(obbs)))
+
+
+def interrupt_function():
+    global should_continue
+    should_continue = False
+    return "Interrupted."
 
 
 # ----------------------------
@@ -238,8 +284,11 @@ with gr.Blocks(css=custom_css) as demo:
                     visual_model = gr.Dropdown(["YOLO_V11"], label="Visual Model", value="YOLO_V11")
                     agent_model = gr.Dropdown(["QTable", "NN"], label="Agent Model", value="QTable")
                     training_radio = gr.Checkbox(False, label="Training", elem_classes="custom-checkbox")
-                in_image = gr.File(label="Upload an Image", height=30)
-                btn = gr.Button("Detect", interactive=False)
+                    retrain_radio = gr.Checkbox(True, label="Retraining", elem_classes="custom-checkbox")
+                    in_image = gr.File(label="Upload an Image", height=30)
+                with gr.Row():
+                    btn = gr.Button("Detect", interactive=False)
+                    stop_btn = gr.Button("Stop")
                 message = gr.Label(label="Progress: ", value="")
     in_image.change(
         fn=update_file,
@@ -248,8 +297,13 @@ with gr.Blocks(css=custom_css) as demo:
     )
     btn.click(
         fn=rl_search_and_detect,
-        inputs=[in_image, target_dropdown, steps_dropdown, visual_model, agent_model, training_radio],
+        inputs=[in_image, target_dropdown, steps_dropdown, visual_model, agent_model, training_radio, retrain_radio],
         outputs=[out_image, heatmap, window, message],
+    )
+    stop_btn.click(
+        fn=interrupt_function,
+        inputs=[],
+        outputs=[message]
     )
 
 if __name__ == "__main__":

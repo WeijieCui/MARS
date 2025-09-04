@@ -89,7 +89,7 @@ if __name__ == '__main__':
         image_steps = []
         for image, target in train_dataset:
             env.set_image(image)
-            env.set_all_target(target)
+            env.set_references(target)
             status = env.reset()
             image_reward = 0
             done = False
@@ -103,7 +103,7 @@ if __name__ == '__main__':
                 if not action:
                     break
                 # 执行动作
-                next_status, reward, obbs, window = env.step(action)
+                next_status, reward, obbs, new_obbs, window = env.step(action)
                 merge_bounding_box(all_obbs, obbs)
                 # 学习
                 agent.update(status, action, reward, next_status)

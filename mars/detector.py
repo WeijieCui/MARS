@@ -12,7 +12,7 @@ class BaseDetector:
     def __init__(self):
         pass
 
-    def infer_obb(self, crop: np.ndarray, target: str = '') -> Tuple[
+    def infer_obb(self, crop: np.ndarray, target: int = -1) -> Tuple[
         List[Dict[str, Any]], float]:
         """
         在给定 ROI 上做检测，返回:
@@ -64,7 +64,7 @@ class YoloV11Detector(BaseDetector):
         except Exception as e:
             print("YOLO Loaded failed, back to default detector:", e)
 
-    def infer_obb(self, crop: np.ndarray, target: str = '') -> \
+    def infer_obb(self, crop: np.ndarray, target: int = -1) -> \
             Tuple[List[Dict[str, Any]], float]:
         if not self.ready:
             return BaseDetector.infer_obb(self, crop)
@@ -77,7 +77,7 @@ class YoloV11Detector(BaseDetector):
         # return BaseDetector.infer_obb(self, image_bgr, roi_xyxy)
 
 
-def parse_yolo_obb(results, target: str = ''):
+def parse_yolo_obb(results, target: int = -1):
     """
     Convert YOLO OBB results to list of dicts:
     [{'cx','cy','w','h','theta','score'}, ...]
@@ -86,19 +86,19 @@ def parse_yolo_obb(results, target: str = ''):
     for r in results:  # each image
         if not hasattr(r, "obb"):  # safety
             continue
-        target_num = int(target)
         # r.obb is an ultralytics.OBB object with xywhr, conf, cls
         xywhr = r.obb.xywhr.cpu().numpy()  # (N,5) [x,y,w,h,theta(rad)]
         confs = r.obb.conf.cpu().numpy()  # (N,)
         cls = r.obb.cls.cpu().numpy().astype(int)  # (N,)
         for (cx, cy, w, h, theta), score, cl in zip(xywhr, confs, cls):
-            if target_num < 0 or target_num == cl:
+            if target < 0 or target == cl:
                 obbs.append({
                     "cx": float(cx),
                     "cy": float(cy),
                     "w": float(w),
                     "h": float(h),
                     "theta": float(theta * 180 / math.pi),  # convert rad→deg
-                    "score": float(score)
+                    "score": float(score),
+                    "class": cl
                 })
     return obbs

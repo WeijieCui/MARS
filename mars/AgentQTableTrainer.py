@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 from matplotlib import pyplot as plt
 
-from agent import RLQtableAgent
+from rl_model import RLQtableModel
 from torch.utils.data import Dataset
 
 from mars.detector import YoloV11Detector
@@ -65,7 +65,7 @@ class DotaRawDataset(Dataset):
 if __name__ == '__main__':
     episodes = 8
     log_interval = 1
-    agent = RLQtableAgent(training=True, load=True)
+    rl_model = RLQtableModel(training=True, load=True)
     train_dataset = DotaRawDataset(
         # image_dir=os.path.join('../data/train', 'images'),
         # label_dir=os.path.join('../data/train', 'labelTxt')
@@ -99,14 +99,14 @@ if __name__ == '__main__':
             obbs = []
             for step in range(10):
                 # 选择动作
-                action = agent.select_action(*status)
+                action = rl_model.select_action(*status)
                 if not action:
                     break
                 # 执行动作
                 next_status, reward, obbs, new_obbs, window = env.step(action)
                 merge_bounding_box(all_obbs, obbs)
                 # 学习
-                agent.update(status, action, reward, next_status)
+                rl_model.update(status, action, reward, next_status)
                 status = next_status
                 image_reward += reward
             # 记录本轮指标
@@ -131,7 +131,7 @@ if __name__ == '__main__':
               f"Steps: {episode_steps} | "
               f"Avg Reward (MA100): {moving_avg_r:6.1f} | "
               f"Avg Found (MA100): {moving_avg_f:4.1f}")
-        agent.save('qtable-{}.pkl'.format(episode))
+        rl_model.save('qtable-{}.pkl'.format(episode))
     # 训练结束后绘制图表
     plt.figure(figsize=(12, 10))
 

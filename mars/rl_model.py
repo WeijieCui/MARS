@@ -5,13 +5,10 @@ import random
 from abc import ABC, abstractmethod
 from typing import Dict, Tuple
 
-# ----------------------------
-# 强化学习控制器（简化 Q-Learning）
-# ----------------------------
 ACTIONS = ["up", "down", "left", "right", "zoom_in", "zoom_out"]
 
 
-class Agent(ABC):
+class ReinforcementLearning(ABC):
 
     @abstractmethod
     def select_action(self, i, j, scale_bin, actions) -> str:
@@ -34,11 +31,11 @@ class Agent(ABC):
         pass
 
 
-class RLQtableAgent(Agent):
+class RLQtableModel(ReinforcementLearning):
 
-    def __init__(self, grid_shape=(10, 10), eps=0.15, alpha=0.5, gamma=0.9, training=False, load: bool = False,
+    def __init__(self, grid_shape=(10, 10), eps=0.15, alpha=0.5, gamma=0.9, save=False, load: bool = False,
                  model: str = 'qtable.pkl'):
-        self.training = training
+        self._save = save
         self.H, self.W = grid_shape
         self.model: Dict[Tuple[int, int, int, str], float] = {}  # (i,j,scale_bin,action) -> Q
         self.eps = eps
@@ -56,7 +53,7 @@ class RLQtableAgent(Agent):
         # ε-greedy
         if random.random() < self.eps:
             return random.choice(actions)
-        # 选 Q 值最大的动作；若都未见过，则启发式优先未访问区域
+        # Select an action with max Q, if not seen, randomly choice one.
         best_a, best_q = None, -1e9
         for a in actions:
             q = self.model.get(self._key(i, j, scale_bin, a), 0.0)
@@ -65,23 +62,22 @@ class RLQtableAgent(Agent):
         return best_a or random.choice(actions)
 
     def update(self, status, a, r, status_new):
-        if not self.training:
+        if not self._save or not status_new[3]:
             return
         (i, j, scale_bin, actions) = status
         (i2, j2, scale_bin2, actions2) = status_new
         key = self._key(i, j, scale_bin, a)
         q = self.model.get(key, 0.0)
-        # 目标 = r + gamma * max_a' Q(s',a')
-        max_next = max([self.model.get(self._key(i2, j2, scale_bin2, ap), 0.0) for ap in actions2])
+        q_vals = [self.model.get(self._key(i2, j2, scale_bin2, ap), 0.0) for ap in actions2]
+        max_next = max(q_vals) if q_vals else 0
+        # New QValue = QValue + alpha * (reward + gamma * max_next - Q)
         new_q = q + self.alpha * (r + self.gamma * max_next - q)
         self.model[key] = new_q
 
     def save(self, filename: str = 'qtable.pkl'):
         """
-        保存Q表到文件
-        参数:
-            filename: 文件名
-            format: 保存格式，可选 'pickle' 或 'json'
+        save model
+        :param filename: filename
         """
         if filename.endswith('.pkl'):
             with open(filename, 'wb') as f:
@@ -93,7 +89,7 @@ class RLQtableAgent(Agent):
                     'grid_shape': (self.H, self.W)
                 }, f)
         elif filename.endswith('.json'):
-            # 将Q表转换为可JSON序列化的格式
+            # Save Q table in JSON format
             qtable_serializable = {
                 f"{k[0]},{k[1]},{k[2]},{k[3]}": v for k, v in self.model.items()
             }
@@ -108,15 +104,13 @@ class RLQtableAgent(Agent):
                 json.dump(data, f, indent=2)
         else:
             raise ValueError("format must be 'pickle' or 'json'")
-        print(f"Q表已保存到 {filename}.")
+        print(f"Q table was saved to {filename}.")
 
     def load(self, filename: str = 'qtable.pkl'):
         """
-        从文件加载Q表
-
-        参数:
-            filename: 文件名
-            format: 文件格式，可选 'auto', 'pickle', 或 'json'
+        load a model from file
+        :param filename: filename
+        :return:
         """
         try:
             if filename.endswith('.pkl'):
@@ -131,7 +125,7 @@ class RLQtableAgent(Agent):
             elif filename.endswith('.json'):
                 with open(filename, 'r') as f:
                     data = json.load(f)
-                    # 将字符串键转换回元组键
+                    # Convert json data to an object
                     self.model = {}
                     for key_str, value in data['model'].items():
                         parts = key_str.split(',')
@@ -142,15 +136,14 @@ class RLQtableAgent(Agent):
                     self.gamma = data.get('gamma', self.gamma)
                     if 'grid_shape' in data:
                         self.H, self.W = data['grid_shape']
-            print(f"Q表已从 {filename} 加载，共 {len(self.model)} 个状态-动作对")
+            print(f"Load a model from {filename}.")
 
         except FileNotFoundError:
-            print(f"文件 {filename} 不存在，使用空的Q表")
+            print(f"Load a model failed: {filename} not exit.")
         except Exception as e:
-            print(f"加载Q表时出错: {e}")
-            # 保持当前Q表不变
+            print(f"Load a model failed, message: {e}")
 
     def clear(self):
-        """清空Q表"""
+        """Clear Q table"""
         self.model.clear()
-        print("Q表已清空")
+        print("Cleared Q table.")

@@ -33,10 +33,9 @@ class ReinforcementLearning(ABC):
 
 class RLQtableModel(ReinforcementLearning):
 
-    def __init__(self, grid_shape=(10, 10), eps=0.15, alpha=0.5, gamma=0.9, save=False, load: bool = False,
+    def __init__(self, eps=0.15, alpha=0.5, gamma=0.9, save=False, load: bool = False,
                  model: str = 'qtable.pkl'):
         self._save = save
-        self.H, self.W = grid_shape
         self.model: Dict[Tuple[int, int, int, str], float] = {}  # (i,j,scale_bin,action) -> Q
         self.eps = eps
         self.alpha = alpha
@@ -86,7 +85,6 @@ class RLQtableModel(ReinforcementLearning):
                     'eps': self.eps,
                     'alpha': self.alpha,
                     'gamma': self.gamma,
-                    'grid_shape': (self.H, self.W)
                 }, f)
         elif filename.endswith('.json'):
             # Save Q table in JSON format
@@ -98,7 +96,6 @@ class RLQtableModel(ReinforcementLearning):
                 'eps': self.eps,
                 'alpha': self.alpha,
                 'gamma': self.gamma,
-                'grid_shape': [self.H, self.W]
             }
             with open(filename, 'w') as f:
                 json.dump(data, f, indent=2)
@@ -120,8 +117,6 @@ class RLQtableModel(ReinforcementLearning):
                     self.eps = data.get('eps', self.eps)
                     self.alpha = data.get('alpha', self.alpha)
                     self.gamma = data.get('gamma', self.gamma)
-                    if 'grid_shape' in data:
-                        self.H, self.W = data['grid_shape']
             elif filename.endswith('.json'):
                 with open(filename, 'r') as f:
                     data = json.load(f)
@@ -134,8 +129,6 @@ class RLQtableModel(ReinforcementLearning):
                     self.eps = data.get('eps', self.eps)
                     self.alpha = data.get('alpha', self.alpha)
                     self.gamma = data.get('gamma', self.gamma)
-                    if 'grid_shape' in data:
-                        self.H, self.W = data['grid_shape']
             print(f"Load a model from {filename}.")
 
         except FileNotFoundError:

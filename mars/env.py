@@ -129,8 +129,37 @@ class SearchEnv:
         i, j = self._cell_of(self.cx, self.cy)
         x1, y1, x2, y2 = self._fit_window()
         crop = self.img[y1:y2, x1:x2]
-        reward = 0.0
+        reward = self.first_view()
         return (i, j, self.scale_idx, self.actions), reward, self.found_objects, self.new_found_objects, crop
+
+    def first_view(self):
+        i, j = self._cell_of(self.cx, self.cy)
+        x1, y1, x2, y2 = self._fit_window()
+        crop = self.img[y1:y2, x1:x2]
+        obbs, _ = self.detector.infer_obb(crop, self.target)
+        fix_obbs(obbs, x1, y1)
+        self.new_found_objects = merge_bounding_box(self.found_objects, obbs)
+        self.found_objects.extend(self.new_found_objects)
+        scores = [obb['score'] for obb in self.new_found_objects]
+        best_conf = max(scores) if scores else -1
+        # Update
+        if best_conf > 0:
+            self.multi_grids[self.scale_idx][i, j] = max(self.multi_grids[self.scale_idx][i, j], best_conf)
+        else:
+            if self.multi_grids[self.scale_idx][i, j] == 0 or len(self.new_found_objects) == 0:
+                self.multi_grids[self.scale_idx][i, j] = -1  # First not found
+
+        # Reward
+        reward = 0.0
+        if best_conf > 0:
+            reward += 1.0 + best_conf  # Found
+            if self.scale_idx < len(self.scale_levels) - 1:
+                reward += 0.1  # Encourage Fine Grain
+        else:
+            reward -= 0.2
+            if self.multi_grids[self.scale_idx][i, j] != 0 and self.multi_grids[self.scale_idx][i, j] != -1:
+                reward -= 0.1
+        return reward
 
     def get_status(self):
         i, j = self._cell_of(self.cx, self.cy)
@@ -143,12 +172,12 @@ class SearchEnv:
         Tuple[int, int, int],
         np.ndarray]:
         """
-        执行动作 -> 检测 -> 更新栅格
-        返回: s(当前i,j,scale_bin), r(奖励), obbs(此次检测的结果), status_new(新状态)
+        Step an action and update status
+        :param action:
+        :return:
         """
-        # 当前状态（以窗口中心映射到网格）
         assert action in self.actions
-        # 2) 状态转移：根据动作移动/缩放窗口
+        # 2) Update window
         step_px = max(20, self.scale_levels[self.scale_idx] * self.W)
         step_py = max(20, self.scale_levels[self.scale_idx] * self.H)
         if action == "up":
@@ -169,16 +198,16 @@ class SearchEnv:
                 self.cx = self.W - 1
         elif action == "zoom_out":
             self.scale_idx += 1
-            if self.scale_idx >= len(self.scale_levels) - 1:
+            if self.scale_idx > len(self.scale_levels) - 1:
                 self.scale_idx = len(self.scale_levels) - 1
         elif action == "zoom_in":
             self.scale_idx -= 1
-            if self.scale_idx <= 0:
+            if self.scale_idx < 0:
                 self.scale_idx = 0
         self.refresh_actions()
-        # 新状态
+        # New status
         i, j = self._cell_of(self.cx, self.cy)
-        # 1) 在当前窗口执行检测
+        # 1) Detect in current window
         x1, y1, x2, y2 = self._fit_window()
         crop = self.img[y1:y2, x1:x2]
         obbs, _ = self.detector.infer_obb(crop, self.target)
@@ -187,19 +216,19 @@ class SearchEnv:
         self.found_objects.extend(self.new_found_objects)
         scores = [obb['score'] for obb in self.new_found_objects]
         best_conf = max(scores) if scores else -1
-        # 更新探索矩阵：以窗口中心所在格为记录点
+        # Update
         if best_conf > 0:
             self.multi_grids[self.scale_idx][i, j] = max(self.multi_grids[self.scale_idx][i, j],
-                                                         best_conf)  # 命中：写入更高置信度
+                                                         best_conf)  # Found: update Q score
         else:
             if self.multi_grids[self.scale_idx][i, j] == 0 or len(self.new_found_objects) == 0:
-                self.multi_grids[self.scale_idx][i, j] = -1  # 首次访问且未命中
-        # 简易奖励设计：命中加奖励，越高越好；未命中小惩罚；重复访问略惩罚
+                self.multi_grids[self.scale_idx][i, j] = -1  # Not found
+        # Rewards
         reward = 0.0
         if best_conf > 0:
-            reward += 1.0 + best_conf  # 命中更鼓励
+            reward += 1.0 + best_conf  # Found
             if self.scale_idx < len(self.scale_levels) - 1:
-                reward += 0.1  # Fine grants
+                reward += 0.1  # Encourage fine grants
         else:
             reward -= 0.2
             if self.multi_grids[self.scale_idx][i, j] != 0 and self.multi_grids[self.scale_idx][i, j] != -1:

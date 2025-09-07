@@ -3,6 +3,7 @@
 MARS Application
 - Action Space: up/down/left/right/zoom_in/zoom_out
 """
+import os
 
 import gradio as gr
 import numpy as np
@@ -30,7 +31,7 @@ custom_css_flex = """
 }
 """
 visual_model_dict = {}
-agent_model_dict = {}
+qtable_model_dict = {}
 env = SearchEnv()
 should_continue = True
 
@@ -147,14 +148,15 @@ def get_detector(model: str):
     return detector
 
 
-def get_agent(model: str, save: bool = False, load=True):
-    if model in agent_model_dict:
-        return agent_model_dict.get(model)
+def get_agent(model: str, save: bool = False, load=True, image_url: str = "default"):
+    if model in qtable_model_dict:
+        return qtable_model_dict.get(model)
     if model == 'QTable':
-        rl_model = RLQtableModel(save=save, load=load, model='qtable-0.pkl')
+        filename = os.path.basename(image_url)
+        rl_model = RLQtableModel(save=save, load=load, model='{}_qtable.pkl'.format(filename))
+        visual_model_dict.setdefault(image_url, rl_model)
     else:
         rl_model = BaseDetector()
-    visual_model_dict.setdefault(model, rl_model)
     return rl_model
 
 
@@ -194,7 +196,7 @@ def rl_search_and_detect(
         visual_model: str = 'YOLO_V11',
         agent_name: str = 'QTable',
         save=False,
-        retraining=False,
+        load=False,
 ):
     """
     Search and detect objects
@@ -203,8 +205,8 @@ def rl_search_and_detect(
     :param steps: steps
     :param visual_model: model name
     :param agent_name: agent name
-    :param save: training
-    :param retraining: retrain
+    :param save: save model
+    :param load: load model
     :return:
     """
     if image_url is None:
@@ -218,13 +220,16 @@ def rl_search_and_detect(
     env.set_detector(detector)
     env.set_target(target)
     # RL iterations
-    agent = get_agent(agent_name, save=save, load=retraining)
+    agent = get_agent(agent_name, save=save, load=load, image_url=image_url)
     status, reward, obbs, new_obbs, window = env.reset()
     overlay_rgb = None
     heatmap_rgb = None
     for t in range(int(steps)):
         action = agent.select_action(*status)
         if not action:
+            yield (Image.fromarray(overlay_rgb) if overlay_rgb is not None else None,
+                   Image.fromarray(heatmap_rgb) if heatmap_rgb is not None else None,
+                   Image.fromarray(window), "Found: {}. Done.".format(len(obbs)))
             break
         status_new, reward, obbs, new_obbs, window = env.step(action)
         agent.update(status, action, reward, status_new)
@@ -240,10 +245,8 @@ def rl_search_and_detect(
         if not should_continue or len(status_new[-1]) == 0:
             break
     if save:
-        agent.save()
-    yield (Image.fromarray(overlay_rgb) if overlay_rgb is not None else None,
-           Image.fromarray(heatmap_rgb) if heatmap_rgb is not None else None,
-           Image.fromarray(window), "Found: {}. Done.".format(len(obbs)))
+        filename = os.path.basename(image_url)
+        agent.save("{}_qtable.pkl".format(filename))
 
 
 def interrupt_function():
@@ -295,8 +298,8 @@ with gr.Blocks(css=custom_css) as demo:
                                                  value="10")
                     visual_model = gr.Dropdown(["YOLO_V11"], label="Visual Model", value="YOLO_V11")
                     agent_model = gr.Dropdown(["QTable", "NN"], label="Agent Model", value="QTable")
-                    training_radio = gr.Checkbox(False, label="Training", elem_classes="custom-checkbox")
-                    retrain_radio = gr.Checkbox(True, label="Retraining", elem_classes="custom-checkbox")
+                    save_radio = gr.Checkbox(False, label="SaveModel", elem_classes="custom-checkbox")
+                    load_model_radio = gr.Checkbox(True, label="LoadModel", elem_classes="custom-checkbox")
                     in_image = gr.File(label="Upload an Image", height=30)
                 with gr.Row():
                     btn = gr.Button("Detect", interactive=False)
@@ -309,7 +312,7 @@ with gr.Blocks(css=custom_css) as demo:
     )
     btn.click(
         fn=rl_search_and_detect,
-        inputs=[in_image, target_dropdown, steps_dropdown, visual_model, agent_model, training_radio, retrain_radio],
+        inputs=[in_image, target_dropdown, steps_dropdown, visual_model, agent_model, save_radio, load_model_radio],
         outputs=[out_image, heatmap, window, message],
     )
     stop_btn.click(

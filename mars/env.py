@@ -2,17 +2,17 @@ import math
 import numpy as np
 from typing import List, Dict, Any, Tuple
 
-from mars.detector import BaseDetector
+from detector import BaseDetector
 from utils import merge_bounding_box
 
-DEFAULT_SCALE_LEVELS = [0.063, 0.125, 0.25, 0.5, 1.0]
+DEFAULT_SCALE_LEVELS = [0.125, 0.25, 0.5, 1.0]
 
 
 # ----------------------------
 # Environment
 # ----------------------------
 class SearchEnv:
-    def __init__(self, grid_n=10):
+    def __init__(self):
         self.H, self.W = 0, 0
         self.img = None
         self.target = -1
@@ -130,7 +130,7 @@ class SearchEnv:
         x1, y1, x2, y2 = self._fit_window()
         crop = self.img[y1:y2, x1:x2]
         reward = self.first_view()
-        return (i, j, self.scale_idx, self.actions), reward, self.found_objects, self.new_found_objects, crop
+        return (i, j, self.scale_idx, self.actions, 0), reward, self.found_objects, self.new_found_objects, crop
 
     def first_view(self):
         i, j = self._cell_of(self.cx, self.cy)
@@ -166,7 +166,7 @@ class SearchEnv:
         return (i, j, self.scale_idx, self.actions)
 
     def step(self, action: str) -> (Tuple)[
-        Tuple[int, int, int, List[str]],
+        Tuple[int, int, int, List[str], float],
         float,
         List[Dict[str, Any]],
         Tuple[int, int, int],
@@ -233,7 +233,9 @@ class SearchEnv:
             reward -= 0.2
             if self.multi_grids[self.scale_idx][i, j] != 0 and self.multi_grids[self.scale_idx][i, j] != -1:
                 reward -= 0.1  # In case of overwrite
-        return (i, j, self.scale_idx, self.actions), reward, self.found_objects, self.new_found_objects, crop
+        avg_conf = sum(obj['score'] for obj in self.new_found_objects) / len(self.new_found_objects) if len(
+            self.new_found_objects) else 0
+        return (i, j, self.scale_idx, self.actions, avg_conf), reward, self.found_objects, self.new_found_objects, crop
 
     def refresh_actions(self):
         idx_y, idx_x = self._cell_of(self.cx, self.cy)

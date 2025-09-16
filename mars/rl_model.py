@@ -6,7 +6,9 @@ from abc import ABC, abstractmethod
 from typing import Dict, Tuple
 
 ACTIONS = ["up", "down", "left", "right", "zoom_in", "zoom_out"]
-
+MODEL_DIR = '../models'
+if not os.path.exists(MODEL_DIR):
+    os.mkdir(MODEL_DIR)
 
 class ReinforcementLearning(ABC):
 
@@ -43,10 +45,10 @@ class RLQtableModel(ReinforcementLearning):
         if load and os.path.exists(model):
             self.load(model)
 
-    def _key(self, i, j, scale_bin, a):
-        return (i, j, scale_bin, a)
+    def _key(self, i, j, scale_bin, a, avg_conf: float):
+        return (i, j, scale_bin, a, avg_conf < 0.3)
 
-    def select_action(self, i, j, scale_bin, actions) -> str:
+    def select_action(self, i, j, scale_bin, actions, avg_conf) -> str:
         if not actions:
             return ''
         # ε-greedy
@@ -55,7 +57,7 @@ class RLQtableModel(ReinforcementLearning):
         # Select an action with max Q, if not seen, randomly choice one.
         best_a, best_q = None, -1e9
         for a in actions:
-            q = self.model.get(self._key(i, j, scale_bin, a), 0.0)
+            q = self.model.get(self._key(i, j, scale_bin, a, avg_conf), 0.0)
             if q > best_q:
                 best_q, best_a = q, a
         return best_a or random.choice(actions)
@@ -63,11 +65,11 @@ class RLQtableModel(ReinforcementLearning):
     def update(self, status, a, r, status_new):
         if not self._save or not status_new[3]:
             return
-        (i, j, scale_bin, actions) = status
-        (i2, j2, scale_bin2, actions2) = status_new
-        key = self._key(i, j, scale_bin, a)
+        (i, j, scale_bin, actions, avg_conf) = status
+        (i2, j2, scale_bin2, actions2, avg_conf2) = status_new
+        key = self._key(i, j, scale_bin, a, avg_conf)
         q = self.model.get(key, 0.0)
-        q_vals = [self.model.get(self._key(i2, j2, scale_bin2, ap), 0.0) for ap in actions2]
+        q_vals = [self.model.get(self._key(i2, j2, scale_bin2, ap, avg_conf2), 0.0) for ap in actions2]
         max_next = max(q_vals) if q_vals else 0
         # New QValue = QValue + alpha * (reward + gamma * max_next - Q)
         new_q = q + self.alpha * (r + self.gamma * max_next - q)
@@ -78,8 +80,9 @@ class RLQtableModel(ReinforcementLearning):
         save model
         :param filename: filename
         """
+        full_path = os.path.join(MODEL_DIR, filename)
         if filename.endswith('.pkl'):
-            with open(filename, 'wb') as f:
+            with open(full_path, 'wb') as f:
                 pickle.dump({
                     'model': self.model,
                     'eps': self.eps,
@@ -97,11 +100,11 @@ class RLQtableModel(ReinforcementLearning):
                 'alpha': self.alpha,
                 'gamma': self.gamma,
             }
-            with open(filename, 'w') as f:
+            with open(full_path, 'w') as f:
                 json.dump(data, f, indent=2)
         else:
             raise ValueError("format must be 'pickle' or 'json'")
-        print(f"Q table was saved to {filename}.")
+        print(f"Q table was saved to {full_path}.")
 
     def load(self, filename: str = 'qtable.pkl'):
         """
@@ -109,16 +112,17 @@ class RLQtableModel(ReinforcementLearning):
         :param filename: filename
         :return:
         """
+        full_path = os.path.join(MODEL_DIR, filename)
         try:
             if filename.endswith('.pkl'):
-                with open(filename, 'rb') as f:
+                with open(full_path, 'rb') as f:
                     data = pickle.load(f)
                     self.model = data['model']
                     self.eps = data.get('eps', self.eps)
                     self.alpha = data.get('alpha', self.alpha)
                     self.gamma = data.get('gamma', self.gamma)
             elif filename.endswith('.json'):
-                with open(filename, 'r') as f:
+                with open(full_path, 'r') as f:
                     data = json.load(f)
                     # Convert json data to an object
                     self.model = {}
@@ -129,10 +133,10 @@ class RLQtableModel(ReinforcementLearning):
                     self.eps = data.get('eps', self.eps)
                     self.alpha = data.get('alpha', self.alpha)
                     self.gamma = data.get('gamma', self.gamma)
-            print(f"Load a model from {filename}.")
+            print(f"Load a model from {full_path}.")
 
         except FileNotFoundError:
-            print(f"Load a model failed: {filename} not exit.")
+            print(f"Load a model failed: {full_path} not exit.")
         except Exception as e:
             print(f"Load a model failed, message: {e}")
 

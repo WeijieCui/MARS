@@ -129,7 +129,7 @@ moving_avg_rewards = []
 moving_avg_found = []
 
 for episode in range(episodes):
-    state = env.reset()
+    status, reward, obbs, new_obbs, window = env.reset()
     total_reward = 0
     done = False
     info = {}

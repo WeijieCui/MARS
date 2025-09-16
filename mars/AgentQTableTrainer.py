@@ -1,4 +1,6 @@
+import logging
 import os
+import time
 
 import cv2
 import numpy as np
@@ -7,9 +9,11 @@ from matplotlib import pyplot as plt
 from rl_model import RLQtableModel
 from torch.utils.data import Dataset
 
-from mars.detector import YoloV11Detector
-from mars.env import SearchEnv
-from mars.utils import merge_bounding_box
+from detector import YoloV11Detector
+from env import SearchEnv
+
+os.environ['GLOG_minloglevel'] = '3'
+logging.disable(logging.CRITICAL)
 
 
 class DotaRawDataset(Dataset):
@@ -62,21 +66,21 @@ class DotaRawDataset(Dataset):
         return img_bgr, {'boxes': bboxes, 'labels': classes}
 
 
-if __name__ == '__main__':
-    episodes = 8
-    log_interval = 1
-    rl_model = RLQtableModel(training=True, load=True)
+def train():
+    episodes = 100
+    log_interval = 5
+    MAX_NUM_EXPLORING_STEP = 20
+    rl_model = RLQtableModel(save=True, load=True)
+    base_data_dir = '..\\..\\data\\train' if os.path.exists('..\\..\\data\\train') else '..\\data\\train'
     train_dataset = DotaRawDataset(
-        # image_dir=os.path.join('../data/train', 'images'),
-        # label_dir=os.path.join('../data/train', 'labelTxt')
-        image_dir=os.path.join('\\Data\\train', 'images'),
-        label_dir=os.path.join('\\Data\\train', 'labelTxt')
+        image_dir=os.path.join(base_data_dir, 'images'),
+        label_dir=os.path.join(base_data_dir, 'labelTxt')
     )
 
     env = SearchEnv()
     env.set_detector(YoloV11Detector())
 
-    # 用于绘图的列表
+    # data for performance figures
     episode_rewards = []
     episode_vehicles_found = []
     episode_steps = []
@@ -87,44 +91,47 @@ if __name__ == '__main__':
         vehicles_found_this_episode = 0
         total_reward = 0
         image_steps = []
+        count = 0
+        start = time.time()
         for image, target in train_dataset:
+            count += 1
             env.set_image(image)
             env.set_references(target)
-            status = env.reset()
+            status, reward, obbs, new_obbs, window = env.reset()
             image_reward = 0
             done = False
-            all_obbs = []
             step = 0
             steps_count = 0
             obbs = []
-            for step in range(10):
-                # 选择动作
+            for step in range(MAX_NUM_EXPLORING_STEP):
+                # select action
                 action = rl_model.select_action(*status)
                 if not action:
                     break
-                # 执行动作
+                # act
                 next_status, reward, obbs, new_obbs, window = env.step(action)
-                merge_bounding_box(all_obbs, obbs)
-                # 学习
+                # learn
                 rl_model.update(status, action, reward, next_status)
                 status = next_status
                 image_reward += reward
-            # 记录本轮指标
+            # record this round
             steps_count += step
             total_reward += image_reward
             episode_steps.append(steps_count)
-            vehicles_found_this_episode += len(all_obbs)
+            vehicles_found_this_episode += len(obbs)
+            if count % 10 == 0:
+                print("processed {} images, time: {:.2f} seconds.".format(count, time.time() - start))
         episode_rewards.append(total_reward)
         episode_vehicles_found.append(vehicles_found_this_episode)
 
-        # 计算滑动平均（窗口大小为100）以便更容易看到趋势
+        # Calculate a sliding average (window size 100) to make it easier to see trends
         moving_avg_r = np.mean(episode_rewards[-100:]) if len(episode_rewards) >= 100 else np.mean(episode_rewards)
         moving_avg_rewards.append(moving_avg_r)
         moving_avg_f = np.mean(episode_vehicles_found[-100:]) if len(episode_vehicles_found) >= 100 else np.mean(
             episode_vehicles_found)
         moving_avg_found.append(moving_avg_f)
 
-        # 定期打印日志
+        # Print logs regularly
         print(f"Episode {episode:4d}/{episodes} | "
               f"Reward: {total_reward:6.1f} | "
               f"Vehicles Found: {vehicles_found_this_episode:2d} | "
@@ -132,7 +139,7 @@ if __name__ == '__main__':
               f"Avg Reward (MA100): {moving_avg_r:6.1f} | "
               f"Avg Found (MA100): {moving_avg_f:4.1f}")
         rl_model.save('qtable-{}.pkl'.format(episode))
-    # 训练结束后绘制图表
+    # Draw a chart after training
     plt.figure(figsize=(12, 10))
 
     plt.subplot(2, 2, 1)
@@ -161,8 +168,10 @@ if __name__ == '__main__':
     plt.title('Efficiency: Steps per Episode')
     plt.grid(True)
 
-    # ... 你还可以添加Loss等图 ...
-
     plt.tight_layout()
     plt.savefig('training_metrics.png')
     plt.show()
+
+
+if __name__ == '__main__':
+    train()

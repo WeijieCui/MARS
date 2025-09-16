@@ -6,7 +6,6 @@ import math
 
 def merge_bounding_box(all_boxes: List[Dict[str, Any]], boxes: List[Dict[str, Any]]):
     new_joins = []
-    # merged_boxes = []
     for nb in boxes:
         merged = False
         box1 = (nb['cx'], nb['cy'], nb['w'], nb['h'], nb['theta'] * 180)
@@ -15,35 +14,25 @@ def merge_bounding_box(all_boxes: List[Dict[str, Any]], boxes: List[Dict[str, An
                 box2 = (ob['cx'], ob['cy'], ob['w'], ob['h'], ob['theta'] * 180)
                 iou = obb_iou(box1, box2)
                 if iou > 0.15:
-                    # merged_boxes.append((ob, nb))
                     merged = True
                     break
         if not merged:
             new_joins.append(nb)
     return new_joins
-    # for ob, nb in merged_boxes:
-    #     box1 = (nb['cx'], nb['cy'], nb['w'], nb['h'], nb['theta'] * 180)
-    #     box2 = (ob['cx'], ob['cy'], ob['w'], ob['h'], ob['theta'] * 180)
-    #     merged_box = weighted_fusion([box1, box2], [0.9, 0.8])
-    #     ob['cx'] = merged_box[0]
-    #     ob['cy'] = merged_box[1]
-    #     ob['w'] = merged_box[2]
-    #     ob['h'] = merged_box[3]
-    #     ob['theta'] = merged_box[4] / 180
 
 
 def obb_to_polygon(cx, cy, w, h, angle_deg):
     """
-    将旋转框 (cx, cy, w, h, angle) 转换为 shapely Polygon
-    cx, cy: 中心点
-    w, h: 宽高
-    angle_deg: 旋转角度 (度数制，逆时针)
+    Convert bounding box (cx, cy, w, h, angle) to shapely Polygon
+    cx, cy: center
+    w, h: width, height
+    angle_deg: Rotation angle (degrees, counterclockwise)
     """
     angle = math.radians(angle_deg)
     dx = w / 2
     dy = h / 2
 
-    # 未旋转时的四个顶点 (相对中心)
+    # Four vertices when not rotated (relative to the center)
     corners = [
         (-dx, -dy),
         (dx, -dy),
@@ -51,7 +40,7 @@ def obb_to_polygon(cx, cy, w, h, angle_deg):
         (-dx, dy)
     ]
 
-    # 旋转 + 平移
+    # Rotation + Movement
     rotated = []
     for x, y in corners:
         xr = x * math.cos(angle) - y * math.sin(angle)
@@ -62,7 +51,7 @@ def obb_to_polygon(cx, cy, w, h, angle_deg):
 
 
 def obb_iou(box1, box2):
-    """计算两个 OBB 的 IoU"""
+    """Calculate the IoU of two boxes"""
     poly1 = obb_to_polygon(*box1)
     poly2 = obb_to_polygon(*box2)
     inter = poly1.intersection(poly2).area
@@ -72,7 +61,7 @@ def obb_iou(box1, box2):
 
 def weighted_fusion(boxes, scores):
     """
-    对多个 OBB 进行置信度加权合并
+    Confidence-weighted merging of multiple OBBs
     boxes: [(cx, cy, w, h, angle), ...]
     scores: [score1, score2, ...]
     """

@@ -12,9 +12,9 @@ from PIL import Image
 import math
 from typing import List, Dict, Any
 
-from mars.rl_model import RLQtableModel
-from mars.detector import YoloV11Detector, BaseDetector
-from mars.env import SearchEnv
+from rl_model import RLQtableModel, MODEL_DIR
+from detector import YoloV11Detector, BaseDetector
+from env import SearchEnv
 
 custom_css = """
 .custom-checkbox {
@@ -34,6 +34,9 @@ visual_model_dict = {}
 qtable_model_dict = {}
 env = SearchEnv()
 should_continue = True
+AGENT_VERSIONS = os.listdir(MODEL_DIR)
+AGENT_VERSIONS.append("")
+agent_versions = AGENT_VERSIONS
 
 
 def angle_to_box(cx, cy, w, h, theta_deg):
@@ -148,12 +151,15 @@ def get_detector(model: str):
     return detector
 
 
-def get_agent(model: str, save: bool = False, load=True, image_url: str = "default"):
+def get_agent(model: str, agent_version: str, save: bool = False, load=True, image_url: str = "default"):
     if model in qtable_model_dict:
         return qtable_model_dict.get(model)
     if model == 'QTable':
         filename = os.path.basename(image_url)
-        rl_model = RLQtableModel(save=save, load=load, model='{}_qtable.pkl'.format(filename))
+        if agent_version:
+            rl_model = RLQtableModel(save=save, load=load, model=agent_version)
+        else:
+            rl_model = RLQtableModel(save=save, load=load, model='{}_qtable.pkl'.format(filename))
         visual_model_dict.setdefault(image_url, rl_model)
     else:
         rl_model = BaseDetector()
@@ -195,6 +201,7 @@ def rl_search_and_detect(
         steps: str = '12',
         visual_model: str = 'YOLO_V11',
         agent_name: str = 'QTable',
+        agent_version: str = '',
         save=False,
         load=False,
 ):
@@ -220,7 +227,7 @@ def rl_search_and_detect(
     env.set_detector(detector)
     env.set_target(target)
     # RL iterations
-    agent = get_agent(agent_name, save=save, load=load, image_url=image_url)
+    agent = get_agent(agent_name, agent_version, save=save, load=load, image_url=image_url)
     status, reward, obbs, new_obbs, window = env.reset()
     overlay_rgb = None
     heatmap_rgb = None
@@ -241,8 +248,8 @@ def rl_search_and_detect(
         heatmap_rgb = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
         yield Image.fromarray(overlay_rgb), Image.fromarray(heatmap_rgb), Image.fromarray(
             window), "Steps: {} / {}, found: {}. {}".format(
-            t + 1, steps, len(obbs), 'Done.' if len(status_new[-1]) == 0 else '')
-        if not should_continue or len(status_new[-1]) == 0:
+            t + 1, steps, len(obbs), 'Done.' if len(status_new[3]) == 0 else '')
+        if not should_continue or len(status_new[3]) == 0:
             break
     if save:
         filename = os.path.basename(image_url)
@@ -297,6 +304,8 @@ with gr.Blocks(css=custom_css) as demo:
                     steps_dropdown = gr.Dropdown(["5", "10", "20", "50", "100", "150", "200"], label="Max Steps",
                                                  value="10")
                     visual_model = gr.Dropdown(["YOLO_V11"], label="Visual Model", value="YOLO_V11")
+                    agent_version = gr.Dropdown(agent_versions, label="Agent Version", value=''
+                    if 'qtable.pkl' in agent_versions else agent_versions[0])
                     agent_model = gr.Dropdown(["QTable", "NN"], label="Agent Model", value="QTable")
                     save_radio = gr.Checkbox(False, label="SaveModel", elem_classes="custom-checkbox")
                     load_model_radio = gr.Checkbox(True, label="LoadModel", elem_classes="custom-checkbox")
@@ -312,7 +321,8 @@ with gr.Blocks(css=custom_css) as demo:
     )
     btn.click(
         fn=rl_search_and_detect,
-        inputs=[in_image, target_dropdown, steps_dropdown, visual_model, agent_model, save_radio, load_model_radio],
+        inputs=[in_image, target_dropdown, steps_dropdown, visual_model, agent_model, agent_version, save_radio,
+                load_model_radio],
         outputs=[out_image, heatmap, window, message],
     )
     stop_btn.click(

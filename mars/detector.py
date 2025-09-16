@@ -52,13 +52,13 @@ class YoloV11Detector(BaseDetector):
       2) 在 ROI 上截取后推理，解析为 OBB 列表
     """
 
-    def __init__(self, weights_path: Optional[str] = None):
+    def __init__(self, weights_path: Optional[str] = None, verbose=False):
         super().__init__()
         self.model = None
         self.ready = False
         try:
             from ultralytics import YOLO
-            self.model = YOLO(weights_path or "yolo11n-obb.pt")
+            self.model = YOLO(weights_path or "yolo11n-obb.pt", verbose=verbose)
             self.ready = True
             pass
         except Exception as e:

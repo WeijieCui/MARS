@@ -9,8 +9,8 @@ import numpy as np
 # 检测器接口
 # ----------------------------
 class BaseDetector:
-    def __init__(self):
-        pass
+    def __init__(self, device: str = 'CPU'):
+        self.device = device
 
     def infer_obb(self, crop: np.ndarray, target: int = -1) -> Tuple[
         List[Dict[str, Any]], float]:
@@ -52,13 +52,14 @@ class YoloV11Detector(BaseDetector):
       2) 在 ROI 上截取后推理，解析为 OBB 列表
     """
 
-    def __init__(self, weights_path: Optional[str] = None, verbose=False):
+    def __init__(self, weights_path: Optional[str] = None, device: str = 'CPU', verbose=False):
         super().__init__()
         self.model = None
+        self.device = device
         self.ready = False
         try:
             from ultralytics import YOLO
-            self.model = YOLO(weights_path or "yolo11n-obb.pt", verbose=verbose)
+            self.model = YOLO(weights_path or "yolo11n-obb.pt", verbose=verbose).to(device)
             self.ready = True
             pass
         except Exception as e:
@@ -68,8 +69,6 @@ class YoloV11Detector(BaseDetector):
             Tuple[List[Dict[str, Any]], float]:
         if not self.ready:
             return BaseDetector.infer_obb(self, crop)
-        # TODO: 截取 ROI，送入 YOLO OBB 推理，组装 obbs
-        # 伪代码:
         results = self.model(crop, conf=0.25, iou=0.5)
         obbs = parse_yolo_obb(results, target)  # 转为 [{'cx','cy','w','h','theta','score'}, ...]
         best_conf = max([o['score'] for o in obbs], default=0.0)

@@ -140,11 +140,11 @@ def to_heatmap_image(grid: np.ndarray) -> np.ndarray:
     return vis
 
 
-def get_detector(model: str):
+def get_detector(model: str, device: str):
     if model in visual_model_dict:
         return visual_model_dict.get(model)
     if model == 'YOLO_V11':
-        detector = YoloV11Detector()
+        detector = YoloV11Detector(device)
     else:
         detector = BaseDetector()
     visual_model_dict.setdefault(model, detector)
@@ -202,6 +202,7 @@ def rl_search_and_detect(
         visual_model: str = 'YOLO_V11',
         agent_name: str = 'QTable',
         agent_version: str = '',
+        device: str = 'CPU',
         save=False,
         load=False,
 ):
@@ -222,7 +223,7 @@ def rl_search_and_detect(
     should_continue = True
     img_bgr = cv2.imread(image_url)
     # Env
-    detector = get_detector(visual_model)
+    detector = get_detector(visual_model, device)
     env.set_image(img_bgr)
     env.set_detector(detector)
     env.set_target(target)
@@ -303,6 +304,7 @@ with gr.Blocks(css=custom_css) as demo:
                         value="-1")
                     steps_dropdown = gr.Dropdown(["5", "10", "20", "50", "100", "150", "200"], label="Max Steps",
                                                  value="10")
+                    device_dropdown = gr.Dropdown(["CPU", "GPU"], label="Device", value="CPU")
                     visual_model = gr.Dropdown(["YOLO_V11"], label="Visual Model", value="YOLO_V11")
                     agent_version = gr.Dropdown(agent_versions, label="Agent Version", value=''
                     if 'qtable.pkl' in agent_versions else agent_versions[0])
@@ -321,7 +323,8 @@ with gr.Blocks(css=custom_css) as demo:
     )
     btn.click(
         fn=rl_search_and_detect,
-        inputs=[in_image, target_dropdown, steps_dropdown, visual_model, agent_model, agent_version, save_radio,
+        inputs=[in_image, target_dropdown, steps_dropdown, visual_model, agent_model, agent_version, device_dropdown,
+                save_radio,
                 load_model_radio],
         outputs=[out_image, heatmap, window, message],
     )

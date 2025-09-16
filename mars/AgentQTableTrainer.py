@@ -78,7 +78,7 @@ def train():
     )
 
     env = SearchEnv()
-    env.set_detector(YoloV11Detector())
+    env.set_detector(YoloV11Detector(device='CPU'))
 
     # data for performance figures
     episode_rewards = []

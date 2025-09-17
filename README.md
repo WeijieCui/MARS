@@ -2,24 +2,21 @@
 
 The exponential growth of Remote Sensing (RS) technologies has transformed Earth observation,
 enabling high-resolution imaging for applications like environmental monitoring, urban planning,
-and disaster rescue.
-
+and disaster rescue. 
 However, interpreting these images remains challenging due to their complexity, multi-scale objects,
-and dense spatial-spectral information. Traditional methods rely on single-pass visual Artificial Intelligence (AI)
-models, which struggle with partially obscured, small and shadowed objects.
-Machine learning (ML) and deep learning (DL) have advanced automated analysis, but limitations persist supervised
-models require extensive labelled data,
-while conventional vision-language models (VLMs) lack domain-specific expertise and iterative refinement capabilities.
+and dense spatial-spectral information.
+
 Inspired by the human visual system, to rapidly search and focus on important areas to extract fine details
 and validate information by prior knowledge, Multi-model Agent for Remote Sensing (MARS) offers a promising solution
 to interpret images in detail.
 
+<div>
 <img alt="airport.gif" height="300" src="doc/vedio/airport.gif"/>
 <img alt="harbor.gif" height="300" src="doc/vedio/harbor.gif"/>
 <img alt="lake.gif" height="300" src="doc/vedio/lake.gif"/>
 <img alt="car_park.gif" height="300" src="doc/vedio/car_park.gif"/>
 <img alt="airport2.gif" height="300" src="doc/vedio/airport2.gif"/>
-
+</div>
 An Artificial Intelligence Agent (AI Agent) orchestrates a vision model (VM) and a Reinforcement Learning (RL) model,
 forming the foundation for next-generation remote sensing systems.
 The RL model generates observation strategies for VM to identify the class and location of objects in images by

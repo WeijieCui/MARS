@@ -10,6 +10,7 @@ MODEL_DIR = '../models'
 if not os.path.exists(MODEL_DIR):
     os.mkdir(MODEL_DIR)
 
+
 class ReinforcementLearning(ABC):
 
     @abstractmethod

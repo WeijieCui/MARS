@@ -144,7 +144,7 @@ def get_detector(model: str, device: str):
     if model in visual_model_dict:
         return visual_model_dict.get(model)
     if model == 'YOLO_V11':
-        detector = YoloV11Detector(device)
+        detector = YoloV11Detector(device=device)
     else:
         detector = BaseDetector()
     visual_model_dict.setdefault(model, detector)
@@ -202,7 +202,7 @@ def rl_search_and_detect(
         visual_model: str = 'YOLO_V11',
         agent_name: str = 'QTable',
         agent_version: str = '',
-        device: str = 'CPU',
+        device: str = 'cpu',
         save=False,
         load=False,
 ):
@@ -304,13 +304,13 @@ with gr.Blocks(css=custom_css) as demo:
                         value="-1")
                     steps_dropdown = gr.Dropdown(["5", "10", "20", "50", "100", "150", "200"], label="Max Steps",
                                                  value="10")
-                    device_dropdown = gr.Dropdown(["CPU", "GPU"], label="Device", value="CPU")
+                    device_dropdown = gr.Dropdown(["cpu", "gpu"], label="Device", value="cpu")
                     visual_model = gr.Dropdown(["YOLO_V11"], label="Visual Model", value="YOLO_V11")
-                    agent_version = gr.Dropdown(agent_versions, label="Agent Version", value=''
+                    agent_version = gr.Dropdown(agent_versions, label="RL Version", value=''
                     if 'qtable.pkl' in agent_versions else agent_versions[0])
-                    agent_model = gr.Dropdown(["QTable", "NN"], label="Agent Model", value="QTable")
-                    save_radio = gr.Checkbox(False, label="SaveModel", elem_classes="custom-checkbox")
-                    load_model_radio = gr.Checkbox(True, label="LoadModel", elem_classes="custom-checkbox")
+                    agent_model = gr.Dropdown(["QTable", "NN"], label="RL Model", value="QTable")
+                    save_radio = gr.Checkbox(False, label="SaveRLModel", elem_classes="custom-checkbox")
+                    load_model_radio = gr.Checkbox(True, label="LoadRLModel", elem_classes="custom-checkbox")
                     in_image = gr.File(label="Upload an Image", height=30)
                 with gr.Row():
                     btn = gr.Button("Detect", interactive=False)

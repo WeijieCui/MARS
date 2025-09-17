@@ -1,43 +1,63 @@
-# Visual DOTA
+# MARS
+
+The exponential growth of Remote Sensing (RS) technologies has transformed Earth observation,
+enabling high-resolution imaging for applications like environmental monitoring, urban planning,
+and disaster rescue.
+
+However, interpreting these images remains challenging due to their complexity, multi-scale objects,
+and dense spatial-spectral information. Traditional methods rely on single-pass visual Artificial Intelligence (AI)
+models, which struggle with partially obscured, small and shadowed objects.
+Machine learning (ML) and deep learning (DL) have advanced automated analysis, but limitations persist supervised
+models require extensive labelled data,
+while conventional vision-language models (VLMs) lack domain-specific expertise and iterative refinement capabilities.
+Inspired by the human visual system, to rapidly search and focus on important areas to extract fine details
+and validate information by prior knowledge, Multi-model Agent for Remote Sensing (MARS) offers a promising solution
+to interpret images in detail.
+
+<img alt="airport.gif" height="300" src="doc/vedio/airport.gif"/>
+<img alt="harbor.gif" height="300" src="doc/vedio/harbor.gif"/>
+<img alt="lake.gif" height="300" src="doc/vedio/lake.gif"/>
+<img alt="car_park.gif" height="300" src="doc/vedio/car_park.gif"/>
+<img alt="airport2.gif" height="300" src="doc/vedio/airport2.gif"/>
+
+An Artificial Intelligence Agent (AI Agent) orchestrates a vision model (VM) and a Reinforcement Learning (RL) model,
+forming the foundation for next-generation remote sensing systems.
+The RL model generates observation strategies for VM to identify the class and location of objects in images by
+focusing on different areas multiple times and eventually achieve the visual goal.
+Experiments demonstrate the robustness of the MARS, which is size insensitive and could detect more partially obscured,
+small or shadowed targets. In addition, it does not significantly increase GPU computing resources.
+Code and video demos are available at https://github.com/WeijieCui/MARS.
+
+## Dataset
 
 The [DOTA](https://captain-whu.github.io/DOTA/dataset.html) dataset is a large-scale benchmark
-designed for multi-object detection in aerial images. 
+designed for multi-object detection in aerial images.
 It contains 2,800+ high-resolution images (800×800 to 20,000×20,000 pixels) from multiple sources
 like Google Earth and satellites, with nearly 190,000 annotated object instances across 15 categories
 (e.g., plane, ship, vehicle, sports fields).
-Each object is labeled using oriented bounding boxes (OBBs) to handle complex orientations,
-and tagged by detection difficulty. 
-This makes DOTA ideal for testing models in real world scenarios involving scale, rotation, and dense object layouts.
+This project focuses on particularly [dense images](data), mainly included small cars, big cars and ships.
+<img alt="P0002.png" height="300" src="data/train/images/P0002.png" width="480"/>
+<img alt="P0800.png" height="300" src="data/train/images/P0800.png" width="480"/>
 
-<img alt="result_car2.png" src="src\asserts\images\img.png" width="800"/>
+Please see the [Poster](CSMPR-F02-Poster-MARS.pdf),
+[Presentation](MARS%20Presentation.pdf)
+and [Report](CSMPR-Project%20Report-MARS.pdf) for details.
 
-In disaster response and rescue operations, rapid and accurate identification of critical
-infrastructure and affected zones is essential. 
-Implementing multi-object detection models allows automated analysis of large-scale aerial imagery
-to locate damaged buildings, blocked roads, vehicles, and gathering areas for survivors. 
-The DOTA dataset, with its extensive annotations of structures such as ships, vehicles, and sports fields,
-offers a practical foundation for training AI systems aimed at enhancing situational awareness during emergencies.
-Leveraging advanced deep learning detectors trained on this dataset can significantly prioritize rescue efforts,
-and improve coordination in high-pressure rescue scenarios.
+This project is also available in the GitHub repository https://github.com/WeijieCui/MARS.
 
-This project used three models, YOLO V1 (Building from scratch), YOLO V11 (Pretrained, Oriental Bounding Box) 
-and Faster R-CNN (Pretrained + Transfering, Horizontal Bounding Box), to verify their performance on the DOTA dataset.
-Practice shows that the YOLO V11 model performs best on the dota dataset.
+## Entrance
 
-<img alt="result_car2.png" src="src\asserts\images\yolo11\result_car2.png" width="800"/>
+The main entrance for MARS architecture is [app_v1.py](src%2Fapp_v1.py). 
+To run this script then visit the webpage:
 
-<img alt="result_plane.png" src="src\asserts\images\yolo11\result_plane.png" width="800"/>
+![ui_1.png](doc%2Fimage%2Fui_1.png)
 
-Please see the [report](CSMAI_coursework_report.pdf) for details.
+For more details for training and evaluating the model, please check [src/train.ipynb](src%2Ftrain.ipynb).
 
-
-This project is also available in the GitHub repository https://github.com/UoR-Vision/VisualDota.
-
-To make it easier, you can run this code on [colab](https://colab.research.google.com/github/WeijieCui/MARS-Final/blob/main/src/train.ipynb).
+To make it easier, you can run this code on [colab](https://colab.research.google.com/github/WeijieCui/MARS/blob/main/src/train.ipynb).
 
 ## 🙏 Acknowledgement
+
 Our experiments used the [DOTA](https://captain-whu.github.io/DOTA/dataset.html) dataset.
 
-We use the structures and weights of [YOLO V1](https://arxiv.org/pdf/1506.02640),
-[YOLO V11](https://docs.ultralytics.com/models/yolo11/),
-and [Faster R-CNN](https://arxiv.org/abs/1506.01497) models in our experiments.
+We use the structures and weights of [YOLO V11](https://docs.ultralytics.com/models/yolo11/) model in our experiments.

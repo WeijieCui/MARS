@@ -28,6 +28,15 @@ def obb_to_polygon(cx, cy, w, h, angle_deg):
     w, h: width, height
     angle_deg: Rotation angle (degrees, counterclockwise)
     """
+    return Polygon(obb_to_vertices(cx, cy, w, h, angle_deg))
+
+def obb_to_vertices(cx, cy, w, h, angle_deg):
+    """
+    Convert bounding box (cx, cy, w, h, angle) to shapely Polygon
+    cx, cy: center
+    w, h: width, height
+    angle_deg: Rotation angle (degrees, counterclockwise)
+    """
     angle = math.radians(angle_deg)
     dx = w / 2
     dy = h / 2
@@ -43,12 +52,10 @@ def obb_to_polygon(cx, cy, w, h, angle_deg):
     # Rotation + Movement
     rotated = []
     for x, y in corners:
-        xr = x * math.cos(angle) - y * math.sin(angle)
-        yr = x * math.sin(angle) + y * math.cos(angle)
+        xr = int(x * math.cos(angle) - y * math.sin(angle))
+        yr = int(x * math.sin(angle) + y * math.cos(angle))
         rotated.append((cx + xr, cy + yr))
-
-    return Polygon(rotated)
-
+    return rotated
 
 def obb_iou(box1, box2):
     """Calculate the IoU of two boxes"""

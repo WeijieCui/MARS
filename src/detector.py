@@ -1,15 +1,19 @@
 import math
+import os
 from typing import Optional, List, Dict, Any, Tuple
 
 import cv2
 import numpy as np
+
+from dota_dataset import DOTA_LABELS, IMG_SUFFIX
+from utils import obb_to_vertices
 
 
 # ----------------------------
 # 检测器接口
 # ----------------------------
 class BaseDetector:
-    def __init__(self, device: str = 'CPU'):
+    def __init__(self, device: str = 'cpu'):
         self.device = device
 
     def infer_obb(self, crop: np.ndarray, target: int = -1) -> Tuple[
@@ -39,8 +43,17 @@ class BaseDetector:
             ww = np.random.randint(max(12, w // 10), max(20, w // 3))
             hh = np.random.randint(max(12, h // 10), max(20, h // 3))
             theta = np.random.uniform(-90, 90)
+            cls = np.random.randint(15)
             score = float(np.clip(np.random.normal(loc=0.5 + 0.4 * edge_score, scale=0.15), 0.05, 0.99))
-            obbs.append(dict(cx=int(cx), cy=int(cy), w=int(ww), h=int(hh), theta=float(theta), score=score))
+            obbs.append({
+                'cx': int(cx),
+                'cy': int(cy),
+                'w': int(ww),
+                'h': int(hh),
+                'theta': float(theta),
+                'score': score,
+                'class': cls
+            })
             best_conf = max(best_conf, score)
         return obbs, best_conf
 
@@ -52,7 +65,7 @@ class YoloV11Detector(BaseDetector):
       2) 在 ROI 上截取后推理，解析为 OBB 列表
     """
 
-    def __init__(self, weights_path: Optional[str] = None, device: str = 'CPU', verbose=False):
+    def __init__(self, weights_path: Optional[str] = None, device: str = 'cpu', verbose=False):
         super().__init__()
         self.model = None
         self.device = device
@@ -74,6 +87,29 @@ class YoloV11Detector(BaseDetector):
         best_conf = max([o['score'] for o in obbs], default=0.0)
         return obbs, best_conf
         # return BaseDetector.infer_obb(self, image_bgr, roi_xyxy)
+
+    def batch_visual_search(self, img_dir, result_dir):
+        results = {label: [] for label in range(15)}
+        label_dict = {label: name for name, label in DOTA_LABELS.items()}
+        for count, img_name in enumerate([f for f in os.listdir(img_dir) if f.endswith(IMG_SUFFIX)]):
+            img_bgr = cv2.imread(os.path.join(img_dir, img_name))
+            obbs, _ = self.infer_obb(img_bgr)
+            for obb in obbs:
+                vertices = obb_to_vertices(obb['cx'], obb['cy'], obb['w'], obb['h'], obb['theta'] * 180)
+                vertice_expended = []
+                for x, y in vertices:
+                    vertice_expended.append(int(x))
+                    vertice_expended.append(int(y))
+                results[obb['class']].append(
+                    [img_name.split('.')[0], obb['score'], *vertice_expended])
+            print(f'\rprocessed {count + 1} images.', end='', flush=True)
+        if result_dir:
+            os.makedirs(result_dir, exist_ok=True)
+            for label, targets in results.items():
+                with open(os.path.join(result_dir, label_dict[label] + '.txt'), 'w') as file:
+                    for target in targets:
+                        file.write(' '.join(str(i) for i in target) + '\n')
+        return results
 
 
 def parse_yolo_obb(results, target: int = -1):

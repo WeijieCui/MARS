@@ -30,6 +30,7 @@ def obb_to_polygon(cx, cy, w, h, angle_deg):
     """
     return Polygon(obb_to_vertices(cx, cy, w, h, angle_deg))
 
+
 def obb_to_vertices(cx, cy, w, h, angle_deg):
     """
     Convert bounding box (cx, cy, w, h, angle) to shapely Polygon
@@ -57,10 +58,13 @@ def obb_to_vertices(cx, cy, w, h, angle_deg):
         rotated.append((cx + xr, cy + yr))
     return rotated
 
+
 def obb_iou(box1, box2):
     """Calculate the IoU of two boxes"""
     poly1 = obb_to_polygon(*box1)
     poly2 = obb_to_polygon(*box2)
+    if not poly1.intersects(poly2):
+        return 0.0
     inter = poly1.intersection(poly2).area
     union = poly1.union(poly2).area
     return inter / union if union > 0 else 0.0

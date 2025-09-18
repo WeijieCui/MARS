@@ -230,6 +230,14 @@ def rl_search_and_detect(
     # RL iterations
     agent = get_agent(agent_name, agent_version, save=save, load=load, image_url=image_url)
     status, reward, obbs, new_obbs, window = env.reset()
+    # Wrap outputs
+    heatmap = to_heatmap_image(env.get_grid())
+    overlay = draw_obbs(img_bgr, env.found_objects, window=env.border(), thickness=3)
+    overlay_rgb = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
+    heatmap_rgb = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
+    yield Image.fromarray(overlay_rgb), Image.fromarray(heatmap_rgb), Image.fromarray(
+        window), "Steps: {} / {}, found: {}. {}".format(
+        0, steps, len(obbs), 'Done.' if len(status[3]) == 0 else '')
     overlay_rgb = None
     heatmap_rgb = None
     for t in range(int(steps)):
@@ -302,7 +310,7 @@ with gr.Blocks(css=custom_css) as demo:
                     ],
                         label="Target",
                         value="-1")
-                    steps_dropdown = gr.Dropdown(["5", "10", "20", "50", "100", "150", "200"], label="Max Steps",
+                    steps_dropdown = gr.Dropdown(["0", "5", "10", "20", "50", "100", "150", "200"], label="Max Steps",
                                                  value="10")
                     device_dropdown = gr.Dropdown(["cpu", "gpu"], label="Device", value="cpu")
                     visual_model = gr.Dropdown(["YOLO_V11"], label="Visual Model", value="YOLO_V11")

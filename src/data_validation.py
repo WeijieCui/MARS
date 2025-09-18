@@ -156,10 +156,7 @@ def voc_eval(detpath, annopath, imagesetfile, classname, ovthresh=0.5, use_07_me
 
 
 def run_dota_evaluation(
-        dataset_root_dir='../data',
-        detpath_template='../data/val/agent_pred/{:s}.txt',
-        base_path_template='../data/val/base_pred/{:s}.txt',
-        annopath_template='../data/val/labelTxt/{:s}.txt',
+        label_dir='../data/val',
 ):
     """
     This method is used for mAP calculation.
@@ -169,6 +166,9 @@ def run_dota_evaluation(
     printclassap : Whether to print AP for each class.
     """
     # Define class names
+    detpath_template = label_dir + '/agent_pred/{:s}.txt'
+    base_path_template = label_dir + '/base_pred/{:s}.txt'
+    annopath_template = label_dir + '/labelTxt/{:s}.txt'
     classnames = [
         'plane', 'baseball-diamond', 'bridge', 'ground-track-field',
         'small-vehicle', 'large-vehicle', 'ship', 'tennis-court',
@@ -176,8 +176,8 @@ def run_dota_evaluation(
         'roundabout', 'harbor', 'swimming-pool', 'helicopter'
     ]
     # Automatically generate predict.txt
-    img_dir = os.path.join(dataset_root_dir, 'val/images')
-    train_predict_txt_path = os.path.join(dataset_root_dir, 'val/agent_pred', 'predict.txt')
+    img_dir = os.path.join(label_dir, 'images')
+    train_predict_txt_path = os.path.join(label_dir, 'agent_pred', 'predict.txt')
     img_files = [f for f in os.listdir(img_dir) if f.endswith('.png') or f.endswith('.jpg')]
     file_prefixes = [os.path.splitext(f)[0] for f in img_files]
     with open(train_predict_txt_path, 'w') as f:
@@ -316,13 +316,14 @@ def enhance_and_save_images(image_filename, dataset_root_dir, enhanced_dir, redu
 
 
 if __name__ == '__main__':
-    val_dir = '..\\data\\val\\images'
-    agent_result_dir = '..\\data\\val\\agent_pred'
-    yolo_v11_result_dir = '..\\data\\val\\base_pred'
+    val_image_dir = '../data/val_simple/images'
+    dataset_val_label_dir = '../data/val_simple'
+    agent_result_dir = dataset_val_label_dir + '/agent_pred'
+    yolo_v11_result_dir = dataset_val_label_dir + '/base_pred'
     rl_qtable_model = RLQtableModel(save=False, load=False)
     agent = MARSAgent(rl_model=rl_qtable_model)
-    agent.batch_visual_search(val_dir, agent_result_dir)
+    agent.batch_visual_search(val_image_dir, agent_result_dir)
     yolo_v11 = YoloV11Detector()
-    yolo_v11.batch_visual_search(val_dir, yolo_v11_result_dir)
-    report = run_dota_evaluation('../data')
+    yolo_v11.batch_visual_search(val_image_dir, yolo_v11_result_dir)
+    report = run_dota_evaluation(label_dir=dataset_val_label_dir)
     print(report)

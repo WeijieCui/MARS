@@ -5,7 +5,7 @@ from typing import List, Dict, Any, Tuple
 from detector import BaseDetector
 from utils import merge_bounding_box
 
-DEFAULT_SCALE_LEVELS = [0.125, 0.25, 0.5, 1.0]
+DEFAULT_SCALE_LEVELS = [0.0625, 0.125, 0.25, 0.5, 1.0]
 
 
 # ----------------------------

@@ -38,8 +38,10 @@ class RLQtableModel(ReinforcementLearning):
 
     def __init__(self, eps=0.15, alpha=0.5, gamma=0.9, save=False, load: bool = False,
                  model: str = 'qtable.pkl'):
+        """Init function for RL Q-table model"""
         self._save = save
-        self.model: Dict[Tuple[int, int, int, str], float] = {}  # (i,j,scale_bin,action) -> Q
+        # (i,j,scale_bin,action, confidence) -> Q
+        self.model: Dict[Tuple[int, int, int, str, bool], float] = {}
         self.eps = eps
         self.alpha = alpha
         self.gamma = gamma
@@ -47,9 +49,11 @@ class RLQtableModel(ReinforcementLearning):
             self.load(model)
 
     def _key(self, i, j, scale_bin, a, avg_conf: float):
+        """Generate a key for Q-table"""
         return (i, j, scale_bin, a, avg_conf < 0.3)
 
     def select_action(self, i, j, scale_bin, actions, avg_conf) -> str:
+        """Select an action based on the provided status"""
         if not actions:
             return ''
         # ε-greedy
@@ -64,6 +68,7 @@ class RLQtableModel(ReinforcementLearning):
         return best_a or random.choice(actions)
 
     def update(self, status, a, r, status_new):
+        """Update Q-table based on a reward"""
         if not self._save or not status_new[3]:
             return
         (i, j, scale_bin, actions, avg_conf) = status

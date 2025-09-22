@@ -37,9 +37,9 @@ This project focuses on particularly [dense images](data), mainly included small
 <img alt="P0002.png" height="300" src="data/train/images/P0002.png" width="480"/>
 <img alt="P0800.png" height="300" src="data/train/images/P0800.png" width="480"/>
 
-Please see the [Poster](doc%2FCSMPR-F02-Poster-MARS.pdf),
+Please see the [Poster](doc%2FMARS_Poster.pdf),
 [Presentation](doc%2FMARS%20Presentation.pdf)
-and [Report](doc%2FCSMPR-Project%20Report-MARS.pdf) for details.
+and [Report](doc%2FMARS_Report.pdf) for details.
 
 This project is also available in the GitHub repository https://github.com/WeijieCui/MARS.
 
